@@ -57,10 +57,31 @@ module (a commit cannot contain its own hash).
 - Build: `:app:assembleDebug`, `:app:lintDebug` — PASS
 - Known issues: until pairing exists, accepted messages wait encrypted in the outbox and are
   discarded after 72 h; dual-SIM behaviour untested; OEM battery behaviour untested
-- Commit message: `feat(android): receive, filter and queue incoming SMS`
+- Commit: `9bec826` — `feat(android): receive, filter and queue incoming SMS`
+- Push: SUCCESS
 
 Module order note: Module 4 (backend) is implemented before Module 3 (pairing) because pairing's
 acceptance criteria need the server.
+
+## Module 4 — Node.js/TypeScript relay backend
+
+- Status: `COMPLETED`
+- Created: `server/` (Express 5, `pg`, `ws`, `zod`, `pino`): config validation, migration runner
+  and `001_init.sql` (devices, pairing_sessions, links, messages), token hashing, Ed25519
+  signature verification, auth middleware, IP and per-device rate limits, device / pairing /
+  message modules (routes, service, repo), authenticated WebSocket hub, expiry job, health and
+  metrics endpoints, graceful shutdown; `scripts/dev-db.sh`; `docs/API.md`; `.env.example`
+- Acceptance: starts reliably; migrations run; health checks work; unauthenticated upload and
+  retrieval refused; devices cannot read others' messages; invalid and oversized requests
+  rejected; repeated submissions deduplicated; expired messages removed; logs contain no bodies,
+  secrets or keys — all met and covered by tests
+- Tests: 36 integration tests against PostgreSQL 18 (`npm test`) — PASS
+- Build: `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build` — PASS;
+  manual smoke test of `node dist/server.js` (health, readiness, metrics, SIGTERM) — PASS
+- Known issues: rate-limit counters are in memory (single instance); Docker is not installed on
+  the development host, so container files are added and documented in Module 10 but cannot be
+  executed here
+- Commit message: `feat(server): add encrypted message relay`
 
 ## Modules
 
@@ -69,7 +90,7 @@ acceptance criteria need the server.
 | 1 | Android foundation and application design | COMPLETED |
 | 2 | SMS reception and sender permissions | COMPLETED |
 | 3 | Device identity and secure pairing | NOT STARTED |
-| 4 | Node.js/TypeScript relay backend | NOT STARTED |
+| 4 | Node.js/TypeScript relay backend | COMPLETED |
 | 5 | End-to-end encrypted message transport | NOT STARTED |
 | 6 | Companion inbox and local storage | NOT STARTED |
 | 7 | OTP detection, copying and notifications | NOT STARTED |
