@@ -40,6 +40,7 @@ class OnboardingFlowTest {
         waitForTag("companion_home")
         rule.onNodeWithText("Not paired").assertIsDisplayed()
 
+        rule.onNodeWithTag("inbox_menu").performClick()
         rule.onNodeWithTag("open_settings").performClick()
         rule.onNodeWithTag("theme_dark").performClick()
         rule.onNodeWithTag("reset_app").performScrollTo().performClick()

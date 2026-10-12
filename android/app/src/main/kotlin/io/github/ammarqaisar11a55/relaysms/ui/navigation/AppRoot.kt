@@ -17,7 +17,8 @@ import io.github.ammarqaisar11a55.relaysms.AppContainer
 import io.github.ammarqaisar11a55.relaysms.core.model.ThemeMode
 import io.github.ammarqaisar11a55.relaysms.core.prefs.AppSettings
 import io.github.ammarqaisar11a55.relaysms.feature.filters.SenderFiltersScreen
-import io.github.ammarqaisar11a55.relaysms.feature.home.CompanionHomeScreen
+import io.github.ammarqaisar11a55.relaysms.feature.inbox.InboxScreen
+import io.github.ammarqaisar11a55.relaysms.feature.inbox.MessageDetailScreen
 import io.github.ammarqaisar11a55.relaysms.feature.home.SourceHomeScreen
 import io.github.ammarqaisar11a55.relaysms.feature.onboarding.RoleSelectionScreen
 import io.github.ammarqaisar11a55.relaysms.feature.pairing.PairedDeviceScreen
@@ -66,14 +67,27 @@ private fun AppNavHost(settings: AppSettings) {
         }
         composable(Routes.SOURCE_FILTERS) { SenderFiltersScreen(settings, onBack = back) }
         composable(Routes.COMPANION_HOME) {
-            CompanionHomeScreen(
+            InboxScreen(
+                settings,
+                onOpenMessage = { nav.navigate(Routes.message(it)) },
                 onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                 onOpenPairing = { nav.navigate(Routes.PAIRING) },
                 onOpenDevice = { nav.navigate(Routes.PAIRED_DEVICE) },
             )
         }
+        composable(Routes.COMPANION_MESSAGE) { entry ->
+            MessageDetailScreen(messageId = entry.arguments?.getString("id").orEmpty(), onBack = back)
+        }
         composable(Routes.PAIRING) { PairingScreen(settings, onBack = back, onDone = back) }
         composable(Routes.PAIRED_DEVICE) { PairedDeviceScreen(settings, onBack = back, onPair = { nav.navigate(Routes.PAIRING) }) }
-        composable(Routes.SETTINGS) { SettingsScreen(settings = settings, onBack = back) }
+        composable(Routes.SETTINGS) {
+            SettingsScreen(
+                settings = settings,
+                onBack = back,
+                onOpenDevice = { nav.navigate(Routes.PAIRED_DEVICE) },
+                onOpenPairing = { nav.navigate(Routes.PAIRING) },
+                onOpenFilters = { nav.navigate(Routes.SOURCE_FILTERS) },
+            )
+        }
     }
 }

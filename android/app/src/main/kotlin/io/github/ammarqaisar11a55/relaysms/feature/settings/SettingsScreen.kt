@@ -35,7 +35,11 @@ import io.github.ammarqaisar11a55.relaysms.core.model.DeviceRole
 import io.github.ammarqaisar11a55.relaysms.core.model.ThemeMode
 import io.github.ammarqaisar11a55.relaysms.core.network.ServerUrl
 import io.github.ammarqaisar11a55.relaysms.core.prefs.AppSettings
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.ammarqaisar11a55.relaysms.feature.pairing.label
 import io.github.ammarqaisar11a55.relaysms.ui.components.ConfirmDialog
+import io.github.ammarqaisar11a55.relaysms.ui.components.StatusRow
+import io.github.ammarqaisar11a55.relaysms.ui.components.Tone
 import io.github.ammarqaisar11a55.relaysms.ui.components.FullWidthButton
 import io.github.ammarqaisar11a55.relaysms.ui.components.RelayScaffold
 import io.github.ammarqaisar11a55.relaysms.ui.components.SectionHeader
@@ -43,42 +47,119 @@ import io.github.ammarqaisar11a55.relaysms.ui.navigation.LocalAppContainer
 import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsScreen(settings: AppSettings, onBack: () -> Unit) {
+fun SettingsScreen(
+    settings: AppSettings,
+    onBack: () -> Unit,
+    onOpenDevice: () -> Unit,
+    onOpenPairing: () -> Unit,
+    onOpenFilters: () -> Unit,
+) {
     val container = LocalAppContainer.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     var confirmReset by rememberSaveable { mutableStateOf(false) }
     var resetting by rememberSaveable { mutableStateOf(false) }
+    var confirmDeleteAll by rememberSaveable { mutableStateOf(false) }
+    val peer by container.identityStore.peer.collectAsStateWithLifecycle()
+    val identity by container.identityStore.identity.collectAsStateWithLifecycle()
+    val link by container.linkMonitor.status.collectAsStateWithLifecycle()
 
     RelayScaffold(title = "Settings", onBack = onBack, snackbarHostState = snackbar) { padding ->
         Column(
             Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            SectionHeader("Connection")
+            link.label().let { (label, tone) ->
+                StatusRow(if (settings.role == DeviceRole.SOURCE) "Companion phone" else "Source phone", label, tone)
+            }
+            FullWidthButton(
+                if (peer == null) "Pair a device" else "Paired device",
+                onClick = { if (peer == null) onOpenPairing() else onOpenDevice() },
+                outlined = true,
+                modifier = Modifier.testTag("settings_device"),
+            )
+
+            if (settings.role == DeviceRole.SOURCE) {
+                SectionHeader("Forwarding")
+                StatusRow(
+                    "Forwarding",
+                    if (settings.forwardingEnabled && peer != null) "On" else "Off",
+                    if (settings.forwardingEnabled && peer != null) Tone.OK else Tone.NEUTRAL,
+                )
+                FullWidthButton(
+                    if (settings.allowlistOnly) "Sender filters (chosen senders only)" else "Sender filters (all senders)",
+                    onClick = onOpenFilters,
+                    outlined = true,
+                )
+            }
+
+            if (settings.role == DeviceRole.COMPANION) {
+                SectionHeader("Message retention")
+                Text(
+                    "Messages older than the chosen period are erased from this phone automatically. Erased messages cannot be recovered.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Column(Modifier.selectableGroup()) {
+                    for (days in AppSettings.RETENTION_CHOICES) {
+                        ChoiceRow(
+                            label = when (days) {
+                                0 -> "Keep until I delete them"
+                                7 -> "7 days"
+                                365 -> "1 year"
+                                else -> "$days days"
+                            },
+                            selected = settings.retentionDays == days,
+                            tag = "retention_$days",
+                            onSelect = {
+                                scope.launch {
+                                    container.preferences.setRetentionDays(days)
+                                    container.applyRetention()
+                                }
+                            },
+                        )
+                    }
+                }
+                FullWidthButton("Delete all messages on this phone", onClick = { confirmDeleteAll = true }, outlined = true, modifier = Modifier.testTag("delete_all_messages"))
+            }
+
             SectionHeader("Appearance")
             Column(Modifier.selectableGroup()) {
-                ThemeOption("Follow system", ThemeMode.SYSTEM, settings.themeMode) { scope.launch { container.preferences.setThemeMode(it) } }
-                ThemeOption("Light", ThemeMode.LIGHT, settings.themeMode) { scope.launch { container.preferences.setThemeMode(it) } }
-                ThemeOption("Dark", ThemeMode.DARK, settings.themeMode) { scope.launch { container.preferences.setThemeMode(it) } }
+                ChoiceRow("Follow system", settings.themeMode == ThemeMode.SYSTEM, "theme_system") { scope.launch { container.preferences.setThemeMode(ThemeMode.SYSTEM) } }
+                ChoiceRow("Light", settings.themeMode == ThemeMode.LIGHT, "theme_light") { scope.launch { container.preferences.setThemeMode(ThemeMode.LIGHT) } }
+                ChoiceRow("Dark", settings.themeMode == ThemeMode.DARK, "theme_dark") { scope.launch { container.preferences.setThemeMode(ThemeMode.DARK) } }
             }
 
             SectionHeader("Relay server")
-            ServerUrlEditor(
-                current = settings.serverUrl.ifEmpty { container.environment.defaultServerUrl },
-                allowCleartextLocal = container.environment.allowCleartextLocal,
-                onSave = { url ->
-                    scope.launch {
-                        container.preferences.setServerUrl(url)
-                        snackbar.showSnackbar("Relay server saved")
-                    }
-                },
-            )
+            val registered = identity
+            if (registered != null) {
+                Text(registered.serverUrl, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "This phone is registered with this relay. To use a different relay, reset RelaySMS below and pair again.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                ServerUrlEditor(
+                    current = settings.serverUrl.ifEmpty { container.environment.defaultServerUrl },
+                    allowCleartextLocal = container.environment.allowCleartextLocal,
+                    onSave = { url ->
+                        scope.launch {
+                            container.preferences.setServerUrl(url)
+                            snackbar.showSnackbar("Relay server saved")
+                        }
+                    },
+                )
+            }
 
             SectionHeader("Privacy")
             Text(
                 "Messages are encrypted on the source phone and decrypted only on the companion phone. " +
-                    "The relay server stores ciphertext until it is delivered or expires. RelaySMS has no analytics " +
-                    "and does not back up messages or keys to the cloud.",
+                    "The relay server stores ciphertext until it is delivered or expires, and can see only that two devices " +
+                    "are paired, when they connect, and the size and time of each message. Messages on this phone are " +
+                    "stored encrypted with a key kept in Android Keystore. RelaySMS has no analytics, sends nothing to " +
+                    "third parties, and excludes messages and keys from cloud backup and device transfer. After a reinstall " +
+                    "or on a new phone, stored messages and keys are gone and a new pairing is required.",
                 style = MaterialTheme.typography.bodyMedium,
             )
 
@@ -108,6 +189,23 @@ fun SettingsScreen(settings: AppSettings, onBack: () -> Unit) {
         }
     }
 
+    if (confirmDeleteAll) {
+        ConfirmDialog(
+            title = "Delete all messages?",
+            body = "Every message stored in RelaySMS on this phone is erased. The original SMS on your source phone are not affected. This cannot be undone.",
+            confirmLabel = "Delete all",
+            destructive = true,
+            onDismiss = { confirmDeleteAll = false },
+            onConfirm = {
+                confirmDeleteAll = false
+                scope.launch {
+                    container.inboxRepository.deleteAll()
+                    snackbar.showSnackbar("All messages deleted")
+                }
+            },
+        )
+    }
+
     if (confirmReset) {
         ConfirmDialog(
             title = "Reset RelaySMS?",
@@ -126,15 +224,15 @@ fun SettingsScreen(settings: AppSettings, onBack: () -> Unit) {
 }
 
 @Composable
-private fun ThemeOption(label: String, mode: ThemeMode, current: ThemeMode, onSelect: (ThemeMode) -> Unit) {
+private fun ChoiceRow(label: String, selected: Boolean, tag: String, onSelect: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 48.dp)
-            .selectable(selected = mode == current, role = Role.RadioButton, onClick = { onSelect(mode) })
-            .testTag("theme_${mode.key}"),
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect)
+            .testTag(tag),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        RadioButton(selected = mode == current, onClick = null)
+        RadioButton(selected = selected, onClick = null)
         Text(label, style = MaterialTheme.typography.bodyLarge)
     }
 }

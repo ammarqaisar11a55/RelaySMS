@@ -42,6 +42,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     override suspend fun doWork(): Result {
         val app = applicationContext as? RelaySmsApp ?: return Result.failure()
         return try {
+            app.container.applyRetention()
             when (app.container.relaySync.syncOnce()) {
                 SyncOutcome.COMPLETE, SyncOutcome.NOT_CONFIGURED, SyncOutcome.UNAUTHORIZED -> Result.success()
                 SyncOutcome.RETRY -> Result.retry()

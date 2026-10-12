@@ -26,8 +26,18 @@ data class AppSettings(
     val forwardingEnabled: Boolean = false,
     /** Source phone: when true only senders on the allowlist are forwarded. */
     val allowlistOnly: Boolean = true,
+    /** Companion phone: messages older than this many days are erased. 0 keeps them until deleted. */
+    val retentionDays: Int = DEFAULT_RETENTION_DAYS,
+    val newestFirst: Boolean = true,
+    /** Seconds after which a code copied from RelaySMS is cleared from the clipboard. 0 = never. */
+    val clipboardClearSeconds: Int = 60,
 ) {
     val onboardingComplete: Boolean get() = role != null
+
+    companion object {
+        const val DEFAULT_RETENTION_DAYS = 90
+        val RETENTION_CHOICES = listOf(7, 30, 90, 365, 0)
+    }
 }
 
 data class ForwardingStats(
@@ -51,6 +61,10 @@ class AppPreferences(private val store: DataStore<Preferences>) {
                 serverUrl = p[KEY_SERVER_URL].orEmpty(),
                 forwardingEnabled = p[KEY_FORWARDING] ?: false,
                 allowlistOnly = p[KEY_ALLOWLIST_ONLY] ?: true,
+                retentionDays = (p[KEY_RETENTION_DAYS] ?: AppSettings.DEFAULT_RETENTION_DAYS).takeIf { it in AppSettings.RETENTION_CHOICES }
+                    ?: AppSettings.DEFAULT_RETENTION_DAYS,
+                newestFirst = p[KEY_NEWEST_FIRST] ?: true,
+                clipboardClearSeconds = (p[KEY_CLIPBOARD_CLEAR] ?: 60).coerceIn(0, 600),
             )
         }
 
@@ -71,6 +85,12 @@ class AppPreferences(private val store: DataStore<Preferences>) {
     suspend fun setForwardingEnabled(enabled: Boolean) = store.edit { it[KEY_FORWARDING] = enabled }
 
     suspend fun setAllowlistOnly(enabled: Boolean) = store.edit { it[KEY_ALLOWLIST_ONLY] = enabled }
+
+    suspend fun setRetentionDays(days: Int) = store.edit { it[KEY_RETENTION_DAYS] = days }
+
+    suspend fun setClipboardClearSeconds(seconds: Int) = store.edit { it[KEY_CLIPBOARD_CLEAR] = seconds }
+
+    suspend fun setNewestFirst(newestFirst: Boolean) = store.edit { it[KEY_NEWEST_FIRST] = newestFirst }
 
     suspend fun recordSmsEvent(queued: Boolean, filtered: Boolean, failed: Boolean, queueFull: Boolean, nowMillis: Long) = store.edit {
         it[KEY_STAT_RECEIVED] = (it[KEY_STAT_RECEIVED] ?: 0) + 1
@@ -98,6 +118,9 @@ class AppPreferences(private val store: DataStore<Preferences>) {
         val KEY_SERVER_URL = stringPreferencesKey("server_url")
         val KEY_FORWARDING = booleanPreferencesKey("forwarding_enabled")
         val KEY_ALLOWLIST_ONLY = booleanPreferencesKey("allowlist_only")
+        val KEY_RETENTION_DAYS = intPreferencesKey("retention_days")
+        val KEY_CLIPBOARD_CLEAR = intPreferencesKey("clipboard_clear_seconds")
+        val KEY_NEWEST_FIRST = booleanPreferencesKey("inbox_newest_first")
         val KEY_STAT_RECEIVED = intPreferencesKey("stat_received")
         val KEY_STAT_QUEUED = intPreferencesKey("stat_queued")
         val KEY_STAT_FILTERED = intPreferencesKey("stat_filtered")

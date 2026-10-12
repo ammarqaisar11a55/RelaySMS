@@ -9,6 +9,8 @@ object Routes {
     const val SOURCE_HOME = "source/home"
     const val SOURCE_FILTERS = "source/filters"
     const val COMPANION_HOME = "companion/home"
+    const val COMPANION_MESSAGE = "companion/message/{id}"
+    fun message(id: String) = "companion/message/$id"
     const val SETTINGS = "settings"
     const val PAIRING = "pairing"
     const val PAIRED_DEVICE = "device"

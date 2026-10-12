@@ -144,7 +144,33 @@ acceptance criteria need the server.
   snapshot taken before the request; both now tolerate an overlapping pairing
 - Known issues: the companion home shows a plain list until Module 6; the live connection is
   held only while the app is in the foreground until Module 8
-- Commit message: `feat(transport): deliver end-to-end encrypted messages`
+- Commit: `ce25a9c` — `feat(transport): deliver end-to-end encrypted messages`
+- Push: SUCCESS
+
+## Module 6 — Companion inbox and local storage
+
+- Status: `COMPLETED` (emulator scope)
+- Created: `feature/inbox/InboxScreen` (list with sender, preview, time, unread dot, code badge,
+  connection and sync bar, search, All/Unread/Codes filters, sort, pull to refresh, loading /
+  empty / no-match / storage-error states), `MessageDetailScreen` (full text, sender, times,
+  code card with copy, copy whole message, delete, delivery details), `InboxViewModel`,
+  `inbox/InboxQuery`, `ConnectionSummaries` (status never claims a connection that is not open),
+  `otp/OtpDetector` (first version, on-device only), `SecureClipboard`, `ClipboardClearer`;
+  retention (7/30/90/365 days or keep) with tombstones; settings rewritten per role (connection,
+  paired device, forwarding and filters, retention, delete all, relay server, privacy, reset);
+  `docs/DATA_RETENTION.md`
+- Acceptance: received message appears; inbox survives restart; search and sorting work; no
+  duplicates; expired and deleted messages follow the documented behaviour; migration preserves
+  data (v1→v2 `MigrationTest`); usable in light and dark themes (theme switch covered by
+  `OnboardingFlowTest`; visual check of both themes is part of Module 12) — met
+- Tests: Android JVM 88 (adds `OtpDetectorTest` x12, `InboxQueryTest` x6) — PASS;
+  on-device 36 (adds `InboxScreenTest` x8: list, filters, search, sort, open/read/copy,
+  delete, restart persistence, retention + delete all) — PASS
+- Build: `:app:assembleDebug`, `:app:lintDebug` — PASS
+- Defect found and fixed: navigation after deleting a message could run off the main thread
+- Known issues: search decrypts and filters in memory, which is fine for a personal inbox
+  bounded by retention but is not designed for hundreds of thousands of messages
+- Commit message: `feat(inbox): implement companion message storage`
 
 ## Modules
 
@@ -155,7 +181,7 @@ acceptance criteria need the server.
 | 3 | Device identity and secure pairing | COMPLETED |
 | 4 | Node.js/TypeScript relay backend | COMPLETED |
 | 5 | End-to-end encrypted message transport | COMPLETED |
-| 6 | Companion inbox and local storage | NOT STARTED |
+| 6 | Companion inbox and local storage | COMPLETED |
 | 7 | OTP detection, copying and notifications | NOT STARTED |
 | 8 | Persistent connectivity and background reliability | NOT STARTED |
 | 9 | Security hardening | NOT STARTED |

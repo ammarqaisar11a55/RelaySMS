@@ -20,7 +20,9 @@ import io.github.ammarqaisar11a55.relaysms.delivery.DeliveryWorker
 import io.github.ammarqaisar11a55.relaysms.delivery.OutboxDeliverer
 import io.github.ammarqaisar11a55.relaysms.delivery.OutboxTransport
 import io.github.ammarqaisar11a55.relaysms.delivery.SyncWorker
+import io.github.ammarqaisar11a55.relaysms.feature.inbox.ClipboardClearer
 import io.github.ammarqaisar11a55.relaysms.inbox.InboxRepository
+import io.github.ammarqaisar11a55.relaysms.otp.OtpDetector
 import io.github.ammarqaisar11a55.relaysms.transport.EnvelopeRouter
 import io.github.ammarqaisar11a55.relaysms.transport.RelayOutboxTransport
 import io.github.ammarqaisar11a55.relaysms.transport.RelaySocket
@@ -104,7 +106,18 @@ class AppContainer(context: Context) {
         RelayOutboxTransport(identityStore, { deviceKeys.loadOrCreate() }, apiFactory, onAuthorizationLost = { linkMonitor.refresh() })
     }
 
-    val inboxRepository: InboxRepository by lazy { InboxRepository(database.messageDao(), localCipher) }
+    val inboxRepository: InboxRepository by lazy {
+        InboxRepository(database.messageDao(), localCipher, detectsOtp = OtpDetector::looksLikeOtp)
+    }
+
+    val clipboardClearer: ClipboardClearer by lazy {
+        ClipboardClearer(appContext, appScope) { preferences.current().clipboardClearSeconds }
+    }
+
+    /** Erases messages past the retention period. Cheap; called at start and after each sync. */
+    suspend fun applyRetention() {
+        runCatching { inboxRepository.applyRetention(preferences.current().retentionDays) }
+    }
 
     val relaySync: RelaySync by lazy {
         RelaySync(
@@ -188,6 +201,7 @@ class AppContainer(context: Context) {
             if (database.outboxDao().pendingCount() > 0) deliveryScheduler.schedule()
             if (identityStore.identity.value != null) linkMonitor.refresh()
             if (identityStore.peer.value != null) SyncWorker.ensurePeriodic(appContext)
+            applyRetention()
         }
     }
 }

@@ -92,8 +92,9 @@ fun SectionHeader(text: String, modifier: Modifier = Modifier) {
     )
 }
 
+/** Background and content colours for a status tone. */
 @Composable
-private fun toneColors(tone: Tone): Pair<Color, Color> {
+fun toneColors(tone: Tone): Pair<Color, Color> {
     val s = LocalStatusColors.current
     val c = MaterialTheme.colorScheme
     return when (tone) {
@@ -168,6 +169,7 @@ fun EmptyState(
     modifier: Modifier = Modifier,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
+    actionTestTag: String = "empty_state_action",
 ) {
     Column(
         modifier.fillMaxSize().padding(32.dp),
@@ -181,7 +183,7 @@ fun EmptyState(
         Text(body, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (actionLabel != null && onAction != null) {
             Spacer(Modifier.heightIn(min = 24.dp))
-            Button(onClick = onAction) { Text(actionLabel) }
+            Button(onClick = onAction, modifier = Modifier.testTag(actionTestTag)) { Text(actionLabel) }
         }
     }
 }

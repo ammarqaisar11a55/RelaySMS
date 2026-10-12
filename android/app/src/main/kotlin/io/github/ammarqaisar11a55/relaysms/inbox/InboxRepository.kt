@@ -112,6 +112,20 @@ class InboxRepository(
 
     suspend fun count(): Int = dao.count()
 
+    /**
+     * Applies the retention policy: erases messages whose original time is older than
+     * [retentionDays] (0 = keep), and drops tombstones that are no longer needed for
+     * de-duplication.
+     * @return number of messages erased.
+     */
+    suspend fun applyRetention(retentionDays: Int): Int {
+        val t = now()
+        val erased = if (retentionDays > 0) dao.tombstoneOlderThan(t - retentionDays * DAY_MS, t) else 0
+        dao.purgeTombstonesOlderThan(t - TOMBSTONE_DAYS * DAY_MS)
+        if (erased > 0) cache.clear()
+        return erased
+    }
+
     private fun decrypt(e: MessageEntity): InboxMessage? {
         val cached = cache[e.id]
         if (cached != null) return toModel(e, cached.first, cached.second)
@@ -136,6 +150,10 @@ class InboxRepository(
 
     companion object {
         private const val CACHE_SIZE = 3000
+        private const val DAY_MS = 24L * 60 * 60 * 1000
+
+        /** Longer than the relay can hold a message, so an erased message cannot come back. */
+        const val TOMBSTONE_DAYS = 30L
         fun addressContext(id: String) = "message:$id:address"
         fun bodyContext(id: String) = "message:$id:body"
 

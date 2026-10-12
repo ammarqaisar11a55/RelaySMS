@@ -100,8 +100,8 @@ class PairingOnDeviceTest {
         }
 
         rule.onNodeWithTag("pair_finish").performScrollTo().performClick()
-        waitFor("open_device")
-        rule.onNodeWithTag("open_device").performScrollTo().performClick()
+        waitFor("connection_bar")
+        rule.onNodeWithTag("connection_bar").performClick()
         waitFor("device_revoke")
 
         // The source revokes; the app must notice and stop presenting itself as paired.
