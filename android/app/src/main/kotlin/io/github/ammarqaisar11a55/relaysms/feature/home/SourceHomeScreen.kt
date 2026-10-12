@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.ammarqaisar11a55.relaysms.core.database.OutboxState
 import io.github.ammarqaisar11a55.relaysms.core.prefs.AppSettings
 import io.github.ammarqaisar11a55.relaysms.core.prefs.ForwardingStats
 import io.github.ammarqaisar11a55.relaysms.feature.pairing.label
@@ -102,6 +103,10 @@ fun SourceHomeScreen(
     val stats by container.preferences.stats.collectAsStateWithLifecycle(ForwardingStats())
     val pending by container.database.outboxDao().observePendingCount().collectAsStateWithLifecycle(0)
     val filters by container.sourceStores.filters.collectAsStateWithLifecycle(emptyList())
+    val delivered by remember { container.database.outboxDao().observeCount(OutboxState.DELIVERED) }.collectAsStateWithLifecycle(0)
+    val expired by remember { container.database.outboxDao().observeCount(OutboxState.EXPIRED) }.collectAsStateWithLifecycle(0)
+    val failed by remember { container.database.outboxDao().observeCount(OutboxState.FAILED) }.collectAsStateWithLifecycle(0)
+    val online by container.networkMonitor.online.collectAsStateWithLifecycle()
 
     // Forwarding can only be effective with the permission; never show it as active without it.
     val canForward = smsGranted && paired
@@ -209,10 +214,27 @@ fun SourceHomeScreen(
             )
             link.label().let { (label, tone) -> StatusRow("Companion phone", label, tone) }
             if (paired) FullWidthButton("Paired device", onClick = onOpenDevice, outlined = true, modifier = Modifier.testTag("open_device"))
+            StatusRow("This phone's internet", if (online) "Online" else "No connection", if (online) Tone.OK else Tone.WARN)
+
+            SectionHeader("Delivery")
             StatusRow("Waiting to be sent", pending.toString(), if (pending == 0) Tone.NEUTRAL else Tone.WARN)
+            StatusRow("Sent to the relay (last 7 days)", delivered.toString(), Tone.NEUTRAL)
+            if (paired && link.state == LinkState.PAIRED) {
+                StatusRow("On the relay, not yet received by companion", link.awaitingPeer.toString(), if (link.awaitingPeer == 0) Tone.NEUTRAL else Tone.WARN)
+            }
+            if (expired > 0) StatusRow("Expired before they could be sent", expired.toString(), Tone.ERROR)
+            if (failed > 0) StatusRow("Refused by the relay or unreadable", failed.toString(), Tone.ERROR)
+            if (expired > 0 || failed > 0) {
+                Text(
+                    "These messages were not forwarded. They are still in this phone's normal SMS app. Counts cover the last 7 days.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             if (pending > 0) {
                 Text(
-                    "Messages wait encrypted on this phone until they can be sent. Unsent messages are discarded after 72 hours.",
+                    if (online) "Messages wait encrypted on this phone until the relay accepts them. Unsent messages are discarded after 72 hours."
+                    else "This phone is offline. Messages wait encrypted here and are sent when it is back online; unsent messages are discarded after 72 hours.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

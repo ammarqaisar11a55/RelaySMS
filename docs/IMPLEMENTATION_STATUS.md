@@ -348,7 +348,38 @@ acceptance criteria need the server.
   — PASS; secret scan — no findings; SMS handling measured at 17–27 ms on the emulator
 - Build: `:app:assembleDebug`, `:app:lintDebug` — PASS
 - Known issues: battery impact and low-storage behaviour on real hardware are unmeasured
-- Commit message: `test(integration): verify end-to-end message delivery`
+- Commit: `a85ef01` — `test(integration): verify end-to-end message delivery`
+- Push: SUCCESS
+
+## Module 12 — UX polish and accessibility
+
+- Status: `COMPLETED` (emulator scope; no TalkBack session and no real-device check)
+- Changed: "No internet connection" state driven by the network monitor (inbox bar and source
+  home), separate from "Relay not reachable"; source home "Delivery" section (waiting, sent,
+  on the relay awaiting the companion, expired, refused); connection bar on two lines so its
+  detail is never cut off; system bar icons follow the app theme, not the system theme;
+  `ScreenshotScenario` + `scripts/screenshots.sh` for visual review
+- UX states of the plan and where they are shown: first launch, role selection (onboarding);
+  permission explanation, permission denied incl. restricted-settings guidance (source home);
+  waiting to pair, pairing in progress, success, expired, cancelled, failed (pairing screen);
+  connected, connecting, synchronizing, relay not reachable, no internet, not paired, device
+  revoked (inbox bar, source home, paired-device screen); pending delivery, delivery failure,
+  message expired on the source (source home "Delivery"); no messages, nothing matches, message
+  received, message no longer available, local storage error (inbox and detail). "Connected" is
+  shown only while an authenticated connection is open (unit tested)
+- Accessibility: every text/background pair in both themes meets WCAG AA 4.5:1
+  (`AccessibilityTest`); interactive rows are at least 48 dp; icons have content descriptions or
+  are marked decorative; status changes are live regions; selections use radio/switch semantics;
+  layout verified at font scale 1.3
+- Visual check: 15 screenshots (onboarding, inbox, detail, settings, source home, unpaired,
+  large text; light and dark) captured on the emulator and reviewed; three defects found and
+  fixed (invisible status-bar icons under a forced dark theme, truncated connection detail,
+  capture of onboarding)
+- Tests: Android JVM 110 — PASS; on-device 51 — PASS
+- Build: `:app:assembleDebug` — PASS
+- Known issues: English only, strings in code; not tested with TalkBack or Switch Access; pairing
+  screens cannot be screenshotted by design
+- Commit message: `feat(ui): complete status states and accessibility checks`
 
 ## Modules
 
@@ -365,7 +396,7 @@ acceptance criteria need the server.
 | 9 | Security hardening | COMPLETED |
 | 10 | Backend deployment and configuration | COMPLETED (container files not executed: no Docker on dev host) |
 | 11 | Automated testing and end-to-end validation | COMPLETED (emulator and JVM; real devices not tested) |
-| 12 | UX polish and accessibility | NOT STARTED |
+| 12 | UX polish and accessibility | COMPLETED |
 | 13 | Release builds and private installation | NOT STARTED |
 | 14 | Default SMS app support and remote sending | NOT STARTED |
 | — | CI and quality gates | COMPLETED |

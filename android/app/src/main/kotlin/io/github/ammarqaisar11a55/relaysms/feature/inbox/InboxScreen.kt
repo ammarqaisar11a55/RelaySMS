@@ -109,7 +109,8 @@ fun InboxScreen(
         val job = container.appScope.launch { container.linkMonitor.refresh() }
         onPauseOrDispose { job.cancel() }
     }
-    val summary = ConnectionSummaries.of(link, peer != null, socket, sync, now)
+    val online by container.networkMonitor.online.collectAsStateWithLifecycle()
+    val summary = ConnectionSummaries.of(link, peer != null, socket, sync, now, online)
 
     RelayScaffold(
         title = "Messages",
@@ -203,14 +204,14 @@ fun InboxScreen(
 private fun ConnectionBar(summary: ConnectionSummary, onClick: () -> Unit) {
     val (bg, fg) = toneColors(summary.tone)
     Surface(color = bg, contentColor = fg, modifier = Modifier.fillMaxWidth()) {
-        Row(
-            Modifier.clickable(onClickLabel = "Open pairing details", onClick = onClick).heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 8.dp)
+        Column(
+            Modifier.fillMaxWidth().clickable(onClickLabel = "Open pairing details", onClick = onClick).heightIn(min = 48.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
                 .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }.testTag("connection_bar"),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalArrangement = Arrangement.Center,
         ) {
             Text(summary.label, style = MaterialTheme.typography.labelLarge, modifier = Modifier.testTag("connection_label"))
-            Spacer(Modifier.width(12.dp))
-            Text(summary.detail, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(summary.detail, style = MaterialTheme.typography.bodySmall)
         }
     }
 }

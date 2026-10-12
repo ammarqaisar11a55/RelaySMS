@@ -1,6 +1,10 @@
 package io.github.ammarqaisar11a55.relaysms.ui.theme
 
+import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -10,7 +14,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import io.github.ammarqaisar11a55.relaysms.core.model.ThemeMode
 
-private val LightColors = lightColorScheme(
+internal val LightColors = lightColorScheme(
     primary = Color(0xFF0B6B63),
     onPrimary = Color(0xFFFFFFFF),
     primaryContainer = Color(0xFFA5F2E6),
@@ -36,7 +40,7 @@ private val LightColors = lightColorScheme(
     outline = Color(0xFF6F7977),
 )
 
-private val DarkColors = darkColorScheme(
+internal val DarkColors = darkColorScheme(
     primary = Color(0xFF89D5CA),
     onPrimary = Color(0xFF003732),
     primaryContainer = Color(0xFF00504A),
@@ -66,8 +70,8 @@ private val DarkColors = darkColorScheme(
 @Immutable
 data class StatusColors(val ok: Color, val onOk: Color, val warn: Color, val onWarn: Color)
 
-private val LightStatus = StatusColors(Color(0xFFCDEBD3), Color(0xFF0B3D1A), Color(0xFFFFE7B8), Color(0xFF4A3300))
-private val DarkStatus = StatusColors(Color(0xFF1F4A2B), Color(0xFFCDEBD3), Color(0xFF5C4300), Color(0xFFFFE7B8))
+internal val LightStatus = StatusColors(Color(0xFFCDEBD3), Color(0xFF0B3D1A), Color(0xFFFFE7B8), Color(0xFF4A3300))
+internal val DarkStatus = StatusColors(Color(0xFF1F4A2B), Color(0xFFCDEBD3), Color(0xFF5C4300), Color(0xFFFFE7B8))
 
 val LocalStatusColors = staticCompositionLocalOf { LightStatus }
 
@@ -77,6 +81,18 @@ fun RelayTheme(themeMode: ThemeMode = ThemeMode.SYSTEM, content: @Composable () 
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
+    }
+    // Keep the system bar icons readable when the app theme differs from the system theme.
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            (view.context as? Activity)?.window?.let { window ->
+                WindowCompat.getInsetsController(window, view).apply {
+                    isAppearanceLightStatusBars = !dark
+                    isAppearanceLightNavigationBars = !dark
+                }
+            }
+        }
     }
     androidx.compose.runtime.CompositionLocalProvider(LocalStatusColors provides if (dark) DarkStatus else LightStatus) {
         MaterialTheme(colorScheme = if (dark) DarkColors else LightColors, content = content)

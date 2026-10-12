@@ -79,5 +79,10 @@ class InboxQueryTest {
         assertEquals(ConnectionKind.OFFLINE, kind(LinkState.PAIRED, true, SocketState.STOPPED, old))
         assertEquals(ConnectionKind.OFFLINE, kind(LinkState.PAIRED, true, SocketState.STOPPED, recent.copy(lastOutcome = SyncOutcome.RETRY)))
         assertEquals(ConnectionKind.SYNCING, kind(LinkState.PAIRED, true, SocketState.STOPPED, SyncStatus(running = true)))
+        // No internet on the phone outranks everything except "not paired".
+        fun offline(link: LinkState, paired: Boolean, socket: SocketState) = ConnectionSummaries.of(LinkStatus(link), paired, socket, recent, now, online = false).kind
+        assertEquals(ConnectionKind.NO_NETWORK, offline(LinkState.PAIRED, true, SocketState.CONNECTED))
+        assertEquals(ConnectionKind.NO_NETWORK, offline(LinkState.PAIRED, true, SocketState.WAITING_TO_RETRY))
+        assertEquals(ConnectionKind.NOT_PAIRED, offline(LinkState.NOT_PAIRED, false, SocketState.STOPPED))
     }
 }
