@@ -9,5 +9,6 @@ class RelaySmsApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        container.onProcessStart()
     }
 }

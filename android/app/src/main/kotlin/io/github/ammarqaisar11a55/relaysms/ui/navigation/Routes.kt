@@ -7,6 +7,7 @@ object Routes {
     const val WELCOME = "onboarding/welcome"
     const val ROLE = "onboarding/role"
     const val SOURCE_HOME = "source/home"
+    const val SOURCE_FILTERS = "source/filters"
     const val COMPANION_HOME = "companion/home"
     const val SETTINGS = "settings"
 

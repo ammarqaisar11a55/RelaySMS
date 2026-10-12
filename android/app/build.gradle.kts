@@ -24,6 +24,11 @@ android {
         buildConfigField("boolean", "ALLOW_CLEARTEXT_LOCAL", "false")
     }
 
+    sourceSets {
+        // Exported Room schemas are used by migration tests.
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
@@ -54,6 +59,11 @@ android {
     }
 }
 
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+    arg("room.generateKotlin", "true")
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -70,6 +80,11 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+    implementation(libs.androidx.work.runtime)
+    implementation(libs.tink.android)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
@@ -82,4 +97,7 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.room.testing)
+    androidTestImplementation(libs.androidx.work.testing)
+    androidTestImplementation(libs.kotlinx.coroutines.test)
 }

@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
@@ -52,6 +53,10 @@ class OnboardingFlowTest {
         rule.onNodeWithTag("role_source").performScrollTo().performClick()
         rule.onNodeWithTag("role_confirm").performScrollTo().performClick()
         waitForTag("source_home")
-        rule.onNodeWithText("Off").assertIsDisplayed()
+        rule.onNodeWithTag("sms_permission_request").assertIsDisplayed()
+        rule.onNodeWithTag("open_filters").performScrollTo().performClick()
+        rule.onNodeWithTag("filter_input").performTextInput("TESTBANK")
+        rule.onNodeWithTag("filter_add").performClick()
+        rule.waitUntil(5_000) { rule.onAllNodes(androidx.compose.ui.test.hasText("TESTBANK")).fetchSemanticsNodes().isNotEmpty() }
     }
 }

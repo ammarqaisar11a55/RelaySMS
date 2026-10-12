@@ -16,6 +16,7 @@ import androidx.navigation.compose.rememberNavController
 import io.github.ammarqaisar11a55.relaysms.AppContainer
 import io.github.ammarqaisar11a55.relaysms.core.model.ThemeMode
 import io.github.ammarqaisar11a55.relaysms.core.prefs.AppSettings
+import io.github.ammarqaisar11a55.relaysms.feature.filters.SenderFiltersScreen
 import io.github.ammarqaisar11a55.relaysms.feature.home.CompanionHomeScreen
 import io.github.ammarqaisar11a55.relaysms.feature.home.SourceHomeScreen
 import io.github.ammarqaisar11a55.relaysms.feature.onboarding.RoleSelectionScreen
@@ -52,7 +53,10 @@ private fun AppNavHost(settings: AppSettings) {
     NavHost(navController = nav, startDestination = Routes.startDestination(settings)) {
         composable(Routes.WELCOME) { WelcomeScreen(onContinue = { nav.navigate(Routes.ROLE) }) }
         composable(Routes.ROLE) { RoleSelectionScreen(onBack = back) }
-        composable(Routes.SOURCE_HOME) { SourceHomeScreen(onOpenSettings = { nav.navigate(Routes.SETTINGS) }) }
+        composable(Routes.SOURCE_HOME) {
+            SourceHomeScreen(settings, onOpenSettings = { nav.navigate(Routes.SETTINGS) }, onOpenFilters = { nav.navigate(Routes.SOURCE_FILTERS) })
+        }
+        composable(Routes.SOURCE_FILTERS) { SenderFiltersScreen(settings, onBack = back) }
         composable(Routes.COMPANION_HOME) { CompanionHomeScreen(onOpenSettings = { nav.navigate(Routes.SETTINGS) }) }
         composable(Routes.SETTINGS) { SettingsScreen(settings = settings, onBack = back) }
     }
