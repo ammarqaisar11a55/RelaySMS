@@ -472,7 +472,17 @@ acceptance criteria need the server.
   the app container, not from the repository's housekeeping
 - Known issues: no MMS; the default SIM is always used for sending; "Sent" cannot distinguish
   carrier refusal reasons; Google Play SMS and default-handler policy not assessed
-- Commit message: `feat(sms): add default SMS app support and sending through the source phone`
+- Commit: `5d09929` — `feat(sms): add default SMS app support and sending through the source phone`
+- Push: SUCCESS; CI on GitHub passed for the following commit `9523757`, which contains this module
+
+## Open items that need the owner (as of 2026-10-13)
+
+| Item | State | What is needed |
+| --- | --- | --- |
+| Relay on Vercel | **Not working.** Project `relaysms` exists and is connected to the repository, but all three deployments failed in the build's database step with `DATABASE_URL: Required`; the project has no environment variables | Add `DATABASE_URL` and `CRON_SECRET` to the Vercel project (they are secrets and were not entered by the assistant), then redeploy. See `VERCEL.md` §3 |
+| Supabase database | Untouched. Nothing has been created in it yet | Nothing; the first successful deployment creates the `relaysms` schema |
+| GitHub release | **Not published.** Tag `v0.9.0` was pushed; the Release workflow run stopped at "Check that signing secrets exist" | Run `scripts/create-release-keystore.sh`, add the four `ANDROID_*` repository secrets, then re-run the failed workflow run. See `INSTALL.md` §6 |
+| Real-device validation | **Not performed.** No phone was attached at any point | Work through `TESTING.md` §4 on the source phone and the Galaxy S25 Ultra |
 
 ## Modules
 
