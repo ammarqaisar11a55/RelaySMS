@@ -31,6 +31,10 @@ data class AppSettings(
     val newestFirst: Boolean = true,
     /** Seconds after which a code copied from RelaySMS is cleared from the clipboard. 0 = never. */
     val clipboardClearSeconds: Int = 60,
+    /** Companion phone: announce new messages. Storing messages never depends on this. */
+    val notificationsEnabled: Boolean = true,
+    /** Companion phone: show sender and text in notifications (not on a secure lock screen). Opt-in. */
+    val notificationPreview: Boolean = false,
 ) {
     val onboardingComplete: Boolean get() = role != null
 
@@ -65,6 +69,8 @@ class AppPreferences(private val store: DataStore<Preferences>) {
                     ?: AppSettings.DEFAULT_RETENTION_DAYS,
                 newestFirst = p[KEY_NEWEST_FIRST] ?: true,
                 clipboardClearSeconds = (p[KEY_CLIPBOARD_CLEAR] ?: 60).coerceIn(0, 600),
+                notificationsEnabled = p[KEY_NOTIFICATIONS] ?: true,
+                notificationPreview = p[KEY_NOTIFICATION_PREVIEW] ?: false,
             )
         }
 
@@ -87,6 +93,10 @@ class AppPreferences(private val store: DataStore<Preferences>) {
     suspend fun setAllowlistOnly(enabled: Boolean) = store.edit { it[KEY_ALLOWLIST_ONLY] = enabled }
 
     suspend fun setRetentionDays(days: Int) = store.edit { it[KEY_RETENTION_DAYS] = days }
+
+    suspend fun setNotificationsEnabled(enabled: Boolean) = store.edit { it[KEY_NOTIFICATIONS] = enabled }
+
+    suspend fun setNotificationPreview(enabled: Boolean) = store.edit { it[KEY_NOTIFICATION_PREVIEW] = enabled }
 
     suspend fun setClipboardClearSeconds(seconds: Int) = store.edit { it[KEY_CLIPBOARD_CLEAR] = seconds }
 
@@ -119,6 +129,8 @@ class AppPreferences(private val store: DataStore<Preferences>) {
         val KEY_FORWARDING = booleanPreferencesKey("forwarding_enabled")
         val KEY_ALLOWLIST_ONLY = booleanPreferencesKey("allowlist_only")
         val KEY_RETENTION_DAYS = intPreferencesKey("retention_days")
+        val KEY_NOTIFICATIONS = booleanPreferencesKey("notifications_enabled")
+        val KEY_NOTIFICATION_PREVIEW = booleanPreferencesKey("notification_preview")
         val KEY_CLIPBOARD_CLEAR = intPreferencesKey("clipboard_clear_seconds")
         val KEY_NEWEST_FIRST = booleanPreferencesKey("inbox_newest_first")
         val KEY_STAT_RECEIVED = intPreferencesKey("stat_received")

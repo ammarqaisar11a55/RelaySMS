@@ -10,6 +10,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.Switch
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import io.github.ammarqaisar11a55.relaysms.feature.home.openAppSettings
+import io.github.ammarqaisar11a55.relaysms.ui.components.InfoCard
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -123,6 +131,25 @@ fun SettingsScreen(
                 FullWidthButton("Delete all messages on this phone", onClick = { confirmDeleteAll = true }, outlined = true, modifier = Modifier.testTag("delete_all_messages"))
             }
 
+            if (settings.role == DeviceRole.COMPANION) {
+                NotificationSettings(settings)
+
+                SectionHeader("Copied codes")
+                Text(
+                    "RelaySMS copies a code only when you tap Copy. It can then remove that code from the clipboard after a while, " +
+                        "if the clipboard still holds it and RelaySMS is open to check. Keyboards and other apps may see copied text " +
+                        "before it is removed; this depends on your Android version and cannot be guaranteed.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Column(Modifier.selectableGroup()) {
+                    for ((seconds, label) in listOf(0 to "Do not clear", 30 to "After 30 seconds", 60 to "After 1 minute", 120 to "After 2 minutes", 300 to "After 5 minutes")) {
+                        ChoiceRow(label, settings.clipboardClearSeconds == seconds, "clipboard_$seconds") {
+                            scope.launch { container.preferences.setClipboardClearSeconds(seconds) }
+                        }
+                    }
+                }
+            }
+
             SectionHeader("Appearance")
             Column(Modifier.selectableGroup()) {
                 ChoiceRow("Follow system", settings.themeMode == ThemeMode.SYSTEM, "theme_system") { scope.launch { container.preferences.setThemeMode(ThemeMode.SYSTEM) } }
@@ -220,6 +247,78 @@ fun SettingsScreen(
                 container.appScope.launch { container.resetCoordinator.resetEverything() }
             },
         )
+    }
+}
+
+@Composable
+private fun NotificationSettings(settings: AppSettings) {
+    val container = LocalAppContainer.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var canPost by remember { mutableStateOf(container.messageNotifier.canPost()) }
+    var askedAndDenied by rememberSaveable { mutableStateOf(false) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        canPost = container.messageNotifier.canPost()
+        askedAndDenied = !granted
+    }
+    LifecycleResumeEffect(Unit) {
+        canPost = container.messageNotifier.canPost()
+        onPauseOrDispose { }
+    }
+
+    SectionHeader("Notifications")
+    SwitchRow(
+        title = "Notify me about new messages",
+        subtitle = "Messages are stored whether or not notifications are on.",
+        checked = settings.notificationsEnabled,
+        tag = "notifications_enabled",
+        onChange = { scope.launch { container.preferences.setNotificationsEnabled(it) } },
+    )
+    SwitchRow(
+        title = "Show sender and text",
+        subtitle = "Off: notifications only say \"New message received\". On: the sender and text appear in the notification shade. " +
+            "On a locked screen the content stays hidden unless your phone is set to show all notification content.",
+        checked = settings.notificationPreview,
+        enabled = settings.notificationsEnabled,
+        tag = "notification_preview",
+        onChange = { scope.launch { container.preferences.setNotificationPreview(it) } },
+    )
+    if (settings.notificationsEnabled && !canPost) {
+        InfoCard(
+            title = "Android is blocking notifications",
+            body = if (askedAndDenied) "Notification permission was not granted. You can allow it in App info → Notifications."
+            else "RelaySMS needs Android's notification permission to announce new messages.",
+            tone = Tone.WARN,
+            action = {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU && !askedAndDenied) {
+                    FullWidthButton("Allow notifications", onClick = { launcher.launch(android.Manifest.permission.POST_NOTIFICATIONS) }, modifier = Modifier.testTag("notifications_allow"))
+                } else {
+                    FullWidthButton("Open App info", onClick = { openAppSettings(context) }, outlined = true)
+                }
+            },
+        )
+    }
+    Text(
+        "Android decides when background apps may run. RelaySMS cannot promise that a notification appears the instant a message is sent.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+@Composable
+private fun SwitchRow(title: String, subtitle: String, checked: Boolean, tag: String, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 56.dp)
+            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange)
+            .testTag(tag),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
 }
 

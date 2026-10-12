@@ -5,6 +5,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -14,6 +15,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import io.github.ammarqaisar11a55.relaysms.AppContainer
+import io.github.ammarqaisar11a55.relaysms.core.model.DeviceRole
 import io.github.ammarqaisar11a55.relaysms.core.model.ThemeMode
 import io.github.ammarqaisar11a55.relaysms.core.prefs.AppSettings
 import io.github.ammarqaisar11a55.relaysms.feature.filters.SenderFiltersScreen
@@ -53,6 +55,13 @@ fun AppRoot(container: AppContainer) {
 private fun AppNavHost(settings: AppSettings) {
     val nav = rememberNavController()
     val back: () -> Unit = { nav.popBackStack() }
+    val container = LocalAppContainer.current
+    val openMessage by container.openMessageRequests.collectAsStateWithLifecycle()
+    LaunchedEffect(openMessage, settings.role) {
+        val id = openMessage ?: return@LaunchedEffect
+        container.openMessageRequests.value = null
+        if (settings.role == DeviceRole.COMPANION) nav.navigate(Routes.message(id)) { launchSingleTop = true }
+    }
     NavHost(navController = nav, startDestination = Routes.startDestination(settings)) {
         composable(Routes.WELCOME) { WelcomeScreen(onContinue = { nav.navigate(Routes.ROLE) }) }
         composable(Routes.ROLE) { RoleSelectionScreen(onBack = back) }

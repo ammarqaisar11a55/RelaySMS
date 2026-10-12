@@ -170,7 +170,8 @@ acceptance criteria need the server.
 - Defect found and fixed: navigation after deleting a message could run off the main thread
 - Known issues: search decrypts and filters in memory, which is fine for a personal inbox
   bounded by retention but is not designed for hundreds of thousands of messages
-- Commit message: `feat(inbox): implement companion message storage`
+- Commit: `21b2de4` — `feat(inbox): implement companion message storage`
+- Push: SUCCESS
 
 ## Module 10 — Backend deployment and configuration
 
@@ -202,6 +203,32 @@ acceptance criteria need the server.
   could not be checked with `caddy validate`; PostgreSQL 17 (the Compose image) was not run here
 - Commit message: `feat(deploy): add self-hosted relay deployment`
 
+## Module 7 — OTP detection, copying and notifications
+
+- Status: `COMPLETED` (emulator scope)
+- Created: `notifications/MessageNotifier` + `NotificationText` (local notifications built on the
+  device after the message is already decrypted; generic "New message received" by default,
+  opt-in preview, `VISIBILITY_PRIVATE` with a generic public version for the lock screen,
+  suppressed while the app is open, cleared when the app is opened, tap opens the message);
+  notification settings (enable, preview, permission prompt and App-info fallback);
+  clipboard auto-clear setting (off / 30 s / 1 / 2 / 5 min) with the platform limits explained;
+  `ClipboardClearer` clears only if the clipboard still holds the copied value;
+  `SecureClipboard` flags copied text as sensitive; OTP detector from Module 6 with further cases
+- Not built, deliberately: no automatic copying, no auto-fill or submission of codes, no
+  accessibility service, no push service (so no message content can reach one)
+- Acceptance: detection on-device; relay never receives an extracted code (the detector has no
+  network access and runs only on decrypted local text); copying works; previews follow the
+  privacy setting; disabling notifications does not stop persistence; messages without a code
+  show no code card — met
+- Tests: Android JVM 92 (adds `NotificationTextTest` x4 incl. more OTP edge cases) — PASS with
+  relay integration; on-device 42 (adds `NotificationAndClipboardTest` x6: generic content,
+  preview vs lock-screen version, disabled / foreground suppression, storage with notifications
+  off, timed clipboard clearing that leaves later copies alone, sensitive flag) — PASS
+- Build: `:app:assembleDebug`, `:app:lintDebug` — PASS
+- Known issues: lock-screen behaviour was checked through the notification's visibility and
+  public version, not by looking at a locked physical screen; Samsung One UI rendering untested
+- Commit message: `feat(notifications): add private message notifications and clipboard clearing`
+
 ## Modules
 
 | # | Module | Status |
@@ -212,7 +239,7 @@ acceptance criteria need the server.
 | 4 | Node.js/TypeScript relay backend | COMPLETED |
 | 5 | End-to-end encrypted message transport | COMPLETED |
 | 6 | Companion inbox and local storage | COMPLETED |
-| 7 | OTP detection, copying and notifications | NOT STARTED |
+| 7 | OTP detection, copying and notifications | COMPLETED |
 | 8 | Persistent connectivity and background reliability | NOT STARTED |
 | 9 | Security hardening | NOT STARTED |
 | 10 | Backend deployment and configuration | COMPLETED (container files not executed: no Docker on dev host) |

@@ -22,7 +22,9 @@ import io.github.ammarqaisar11a55.relaysms.delivery.OutboxTransport
 import io.github.ammarqaisar11a55.relaysms.delivery.SyncWorker
 import io.github.ammarqaisar11a55.relaysms.feature.inbox.ClipboardClearer
 import io.github.ammarqaisar11a55.relaysms.inbox.InboxRepository
+import io.github.ammarqaisar11a55.relaysms.notifications.MessageNotifier
 import io.github.ammarqaisar11a55.relaysms.otp.OtpDetector
+import kotlinx.coroutines.flow.MutableStateFlow
 import io.github.ammarqaisar11a55.relaysms.transport.EnvelopeRouter
 import io.github.ammarqaisar11a55.relaysms.transport.RelayOutboxTransport
 import io.github.ammarqaisar11a55.relaysms.transport.RelaySocket
@@ -144,7 +146,29 @@ class AppContainer(context: Context) {
         }
     }
 
+    val messageNotifier: MessageNotifier by lazy { MessageNotifier(appContext) }
+
+    @Volatile
+    var appInForeground: Boolean = false
+        private set
+
+    /** Message id from a tapped notification, consumed by the navigation host. */
+    val openMessageRequests = MutableStateFlow<String?>(null)
+
+    private fun startNotifying() {
+        appScope.launch {
+            inboxRepository.arrivals.collect { message ->
+                val settings = preferences.current()
+                if (settings.role == DeviceRole.COMPANION) {
+                    messageNotifier.onNewMessage(message, settings.notificationsEnabled, settings.notificationPreview, appInForeground)
+                }
+            }
+        }
+    }
+
     fun onAppForeground() {
+        appInForeground = true
+        messageNotifier.clearAll()
         relaySocket.start()
         appScope.launch {
             relaySync.syncOnce()
@@ -153,6 +177,7 @@ class AppContainer(context: Context) {
     }
 
     fun onAppBackground() {
+        appInForeground = false
         relaySocket.stop()
     }
 
@@ -195,6 +220,7 @@ class AppContainer(context: Context) {
 
     /** Called once at process start: resume delivery of anything left in the queue. */
     fun onProcessStart() {
+        startNotifying()
         appScope.launch(Dispatchers.IO) {
             // Touch Keystore-backed state off the main thread so the first screen does not wait for it.
             identityStore.identity.value
