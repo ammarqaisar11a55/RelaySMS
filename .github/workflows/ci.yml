@@ -1,0 +1,199 @@
+name: CI
+
+# Builds and tests the relay and the Android app, checks the deployment files and scans for
+# committed secrets. Uses no private keys, signing material or repository secrets, publishes
+# nothing and deploys nothing.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Throwaway password of the CI-only database service containers below. Not a secret.
+  CI_DB: postgres://relaysms:relaysms_ci@127.0.0.1:5432
+
+jobs:
+  server:
+    name: Relay (typecheck, lint, format, tests, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: relaysms
+          POSTGRES_PASSWORD: relaysms_ci
+          POSTGRES_DB: relaysms_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U relaysms -d relaysms_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Install dependencies from the lockfile
+        run: npm ci --no-fund
+      - name: Type check
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Check formatting
+        run: npm run format:check
+      - name: Tests (run the migrations against PostgreSQL)
+        env:
+          TEST_DATABASE_URL: ${{ env.CI_DB }}/relaysms_test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Apply migrations to an empty database with the built CLI
+        run: |
+          node -e "const pg=require('pg');const c=new pg.Client(process.env.CI_DB+'/relaysms_test');c.connect().then(()=>c.query('CREATE DATABASE relaysms_migrate')).then(()=>c.end())"
+          DATABASE_URL="$CI_DB/relaysms_migrate" npm run migrate
+          DATABASE_URL="$CI_DB/relaysms_migrate" npm run migrate
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  android:
+    name: Android (build, unit and relay integration tests, lint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: relaysms
+          POSTGRES_PASSWORD: relaysms_ci
+          POSTGRES_DB: relaysms_it
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U relaysms -d relaysms_it"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Start a relay for the integration tests
+        working-directory: server
+        env:
+          DATABASE_URL: ${{ env.CI_DB }}/relaysms_it
+          HOST: 127.0.0.1
+          PORT: 18080
+          LOG_LEVEL: warn
+          RATE_LIMIT_MAX: 100000
+          RATE_LIMIT_REGISTRATION_MAX: 10000
+          RATE_LIMIT_PAIRING_MAX: 10000
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          nohup node dist/server.js > "$RUNNER_TEMP/relay.log" 2>&1 &
+          for _ in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:18080/readyz > /dev/null 2>&1 && break
+            sleep 0.5
+          done
+          curl -fsS http://127.0.0.1:18080/readyz || { cat "$RUNNER_TEMP/relay.log"; exit 1; }
+      - name: Assemble the debug APK
+        working-directory: android
+        run: bash ./gradlew --no-daemon assembleDebug
+      - name: Unit and relay integration tests
+        working-directory: android
+        env:
+          RELAY_TEST_URL: http://127.0.0.1:18080
+        run: bash ./gradlew --no-daemon testDebugUnitTest
+      - name: Android lint
+        working-directory: android
+        run: bash ./gradlew --no-daemon lintDebug
+      - name: Keep reports when something failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-reports
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            android/app/build/reports/
+            android/app/build/test-results/
+            ${{ runner.temp }}/relay.log
+
+  deployment-files:
+    name: Deployment files (image build, Compose, Caddyfile, smoke test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      COMPOSE: docker compose --env-file .env.example -f infra/compose.yaml
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compose file is valid with the example environment
+        run: $COMPOSE config --quiet
+      - name: Caddyfile is valid
+        run: >-
+          docker run --rm -e RELAY_DOMAIN=relay.example.com
+          -v "$PWD/infra/reverse-proxy/Caddyfile:/etc/caddy/Caddyfile:ro"
+          caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      - name: Build the image and start database and relay
+        run: $COMPOSE up --detach --build --wait db relay
+      - name: Relay runs as an unprivileged user and reports healthy
+        run: |
+          test "$($COMPOSE exec -T relay id -u)" != "0"
+          $COMPOSE exec -T relay node dist/healthcheck.js
+      - name: Round-trip smoke test through the Compose network
+        run: >-
+          docker run --rm --network relaysms_edge
+          -v "$PWD/scripts/relay-smoke.mjs:/relay-smoke.mjs:ro"
+          node:22-bookworm-slim node /relay-smoke.mjs http://relay:8080
+      - name: Backup and restore commands from the deployment guide
+        run: |
+          $COMPOSE exec -T db pg_dump -U relaysms -Fc relaysms > relaysms.dump
+          $COMPOSE stop relay
+          $COMPOSE exec -T db pg_restore -U relaysms -d relaysms --clean --if-exists --no-owner < relaysms.dump
+          $COMPOSE up --detach --wait relay
+          $COMPOSE exec -T relay node dist/healthcheck.js
+      - name: Graceful stop
+        run: |
+          id="$($COMPOSE ps --all --quiet relay)"
+          $COMPOSE stop relay
+          test "$(docker inspect --format '{{.State.ExitCode}}' "$id")" = "0"
+      - name: Show logs when something failed
+        if: failure()
+        run: $COMPOSE logs --no-color --tail 200
+      - name: Tear down
+        if: always()
+        run: $COMPOSE down --volumes
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Forbidden files and credential patterns in tracked files
+        run: bash scripts/secret-scan.sh
+      - name: gitleaks over the full history
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"

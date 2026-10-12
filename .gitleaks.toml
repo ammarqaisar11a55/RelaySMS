@@ -1,0 +1,15 @@
+# gitleaks configuration (used by the CI secret scan): the default rules, plus an allowlist for
+# dummy values that tests use to prove that configuration values are never printed.
+title = "RelaySMS"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Dummy credentials in tests and documented placeholders"
+regexes = [
+  '''postgresql-super-secret-password''',
+  '''Zx9-[a-z-]+-Zx9''',
+  '''CHANGE_ME''',
+  '''relaysms_ci''',
+]
