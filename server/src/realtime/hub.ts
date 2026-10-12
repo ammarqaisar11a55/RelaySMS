@@ -39,7 +39,8 @@ export class Hub {
 
   /**
    * Handles HTTP upgrade requests on [path]. The connection is authenticated from the
-   * Authorization header before the WebSocket handshake completes.
+   * Authorization header before the WebSocket handshake completes. Credentials are never read
+   * from the URL, so they cannot end up in proxy logs.
    */
   attach(
     server: Server,
@@ -47,6 +48,8 @@ export class Hub {
     authenticate: (req: IncomingMessage) => Promise<Device | null>,
     onConnected: (device: Device) => void,
     logger: Logger,
+    /** Rate limit for connection attempts, checked before any database work. */
+    admit: (req: IncomingMessage) => boolean = () => true,
   ): void {
     server.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
       const reject = (status: number, text: string) => {
@@ -54,6 +57,7 @@ export class Hub {
         socket.destroy();
       };
       if ((req.url ?? '').split('?')[0] !== path) return reject(404, 'Not Found');
+      if (!admit(req)) return reject(429, 'Too Many Requests');
       authenticate(req)
         .then((device) => {
           if (!device) return reject(401, 'Unauthorized');

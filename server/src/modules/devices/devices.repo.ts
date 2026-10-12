@@ -74,6 +74,17 @@ export async function revokeDevice(q: Queryable, id: string, now: Date): Promise
   await q.query('DELETE FROM pairing_sessions WHERE companion_id = $1 OR source_id = $1', [id]);
 }
 
+/**
+ * Removes the rows of devices revoked before [olderThan]. A revoked device can never authenticate
+ * again, so its public keys and credential hash have no further use.
+ */
+export async function deleteRevokedDevices(q: Queryable, olderThan: Date): Promise<number> {
+  const r = await q.query('DELETE FROM devices WHERE revoked_at IS NOT NULL AND revoked_at <= $1', [
+    olderThan,
+  ]);
+  return r.rowCount ?? 0;
+}
+
 export interface Link {
   id: string;
   sourceId: string;

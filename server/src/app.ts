@@ -16,6 +16,12 @@ export function createApp(ctx: AppContext, metrics: Metrics): Express {
   app.disable('x-powered-by');
   app.set('trust proxy', ctx.config.TRUST_PROXY);
   app.use(helmet());
+  // Responses carry credentials (registration, token rotation, pairing codes) and ciphertext.
+  // Nothing the relay returns may be kept by a cache.
+  app.use((_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    next();
+  });
 
   // Content-free access log: method, route pattern, status, duration and device id only.
   app.use((req, res, next) => {

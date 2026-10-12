@@ -175,9 +175,10 @@ acceptance criteria need the server.
 
 ## Module 10 — Backend deployment and configuration
 
-- Status: `COMPLETED` for what can be verified without Docker. **Not verified:** the container
-  files were never built or run — Docker is not installed on the development host — and no
-  deployment was made. `docs/DEPLOYMENT.md` §9 lists exactly what was and was not executed.
+- Status: `COMPLETED`. **Not verified:** the reverse proxy with real traffic and a real
+  certificate, and any deployment on a public host. Docker is not installed on the development
+  host; the image, the Compose stack (database + relay) and the Caddyfile syntax were checked by
+  CI on GitHub instead. `docs/DEPLOYMENT.md` §9 lists exactly what ran where.
 - Created: `server/Dockerfile` (multi-stage, production dependencies only, `USER node`,
   `HEALTHCHECK`), `server/.dockerignore`, `server/src/healthcheck.ts`, `infra/compose.yaml`
   (PostgreSQL 17 with a named volume on an internal network, relay with read-only file system and
@@ -188,20 +189,48 @@ acceptance criteria need the server.
   restore, configuration reference, observable metadata, running without Docker);
   `.env.example` extended with `RELAY_DOMAIN` and `POSTGRES_PASSWORD`
 - Acceptance: start with documented commands, apply migrations, check health, verify message
-  delivery — met for the non-Docker path (commands in `DEPLOYMENT.md` §10 and the Dockerfile's
-  steps reproduced by hand in clean directories); **not demonstrated for `docker compose up`**.
-  Configuration errors reported clearly without printing credentials — met, tested at process
-  level
-- Tests: server 42 (`npm test`, adds `startup.test.ts` x6: exit 78 naming only the bad
-  variables, no password printed when the database is unreachable, clean SIGTERM exit, health
-  probe up / down / database down) — PASS; `scripts/relay-smoke.mjs` against a relay started from
-  an image-layout directory with production dependencies only — 8/8 steps PASS, and correctly
-  refused without the registration code; `pg_dump -Fc` / `pg_restore --clean --if-exists
-  --no-owner` round trip on PostgreSQL 18.6 — PASS; `compose.yaml` parsed as YAML
+  delivery — met locally for the non-Docker path and on CI for `docker compose up` (database and
+  relay; not the proxy). Configuration errors reported clearly without printing credentials —
+  met, tested at process level
+- Tests: server 42 at this commit (`npm test`, adds `startup.test.ts` x6: exit 78 naming only
+  the bad variables, no password printed when the database is unreachable, clean SIGTERM exit,
+  health probe up / down / database down) — PASS; `scripts/relay-smoke.mjs` against a relay
+  started from an image-layout directory with production dependencies only — 8/8 steps PASS, and
+  correctly refused without the registration code; `pg_dump -Fc` / `pg_restore --clean
+  --if-exists --no-owner` round trip on PostgreSQL 18.6 — PASS; CI job `deployment-files` — PASS
+  on GitHub for `cf28179` and `fc3c97d`
 - Build: `npm run typecheck`, `lint`, `format:check`, `build` — PASS
-- Known issues: Dockerfile, Compose file and Caddyfile are unexecuted (see above); the Caddyfile
-  could not be checked with `caddy validate`; PostgreSQL 17 (the Compose image) was not run here
-- Commit message: `feat(deploy): add self-hosted relay deployment`
+- Known issues: Caddy has only been syntax-checked (`caddy validate` in CI), never run with a
+  domain; no real deployment exists
+- Commit: `cace14b` — `feat(deploy): add self-hosted relay deployment`
+- Push: SUCCESS
+
+## CI and quality gates
+
+- Status: `COMPLETED`. All four jobs were observed passing on GitHub for commit `fc3c97d` (run
+  38265649613). The run for `cf28179` was cancelled by the next push after its `server`,
+  `deployment-files` and `secrets` jobs had passed.
+- Created: `.github/workflows/ci.yml` with four jobs — `server` (`npm ci`, typecheck, lint,
+  format check, tests against a PostgreSQL 17 service container, build, migrations applied twice
+  to an empty database with the built CLI, `npm audit --omit=dev --audit-level=high`); `android`
+  (JDK 17, starts a relay, `assembleDebug`, `testDebugUnitTest` with the relay integration tests
+  enabled, `lintDebug`, reports uploaded on failure); `deployment-files` (Compose and Caddyfile
+  validation, image build, database + relay started, smoke test, backup/restore, clean stop);
+  `secrets` (`scripts/secret-scan.sh` and gitleaks over the full history). `scripts/secret-scan.sh`,
+  `.gitleaks.toml`. The workflow uses no repository secrets, signing keys or SSH keys, has
+  read-only permissions, publishes no APK and deploys nothing.
+- Verified locally before pushing: workflow parses as YAML; server commands PASS; the migration
+  step's commands PASS; `npm audit --omit=dev` — 0 vulnerabilities; the three Gradle commands
+  PASS on a clean export of commit `cace14b` with a relay running (`assembleDebug`;
+  `testDebugUnitTest` 88 tests, 0 skipped; `lintDebug`); `scripts/secret-scan.sh` — no findings,
+  and it flags a planted keystore, private key, device token and database URL in a scratch
+  repository
+- Observed on GitHub: job and step conclusions read through the public Actions API
+- Known issues: results were read from the API's job and step conclusions, not from full logs;
+  instrumented (emulator) tests are not part of CI
+- Commit: `cf28179` — `ci: add build and test workflow` (this status entry was added by the
+  following commit)
+- Push: SUCCESS
 
 ## Module 7 — OTP detection, copying and notifications
 
@@ -229,6 +258,37 @@ acceptance criteria need the server.
   public version, not by looking at a locked physical screen; Samsung One UI rendering untested
 - Commit message: `feat(notifications): add private message notifications and clipboard clearing`
 
+## Module 9 — Security hardening
+
+- Status: `IN PROGRESS` — relay review, relay fixes, dependency check and threat model are done.
+  **Remaining (Android, not started):** review of the Android code against the plan's checklist;
+  an app lock or equivalent for the companion inbox; automatic rotation of the relay credential
+  (`POST /v1/devices/me/token` exists and is tested, the app never calls it); a check that
+  release builds contain no debug logging or cleartext allowance; a vulnerability scan of the
+  Android dependencies. The Android statements in `THREAT_MODEL.md` were taken from the code and
+  earlier module records, not re-tested in this module.
+- Created (relay part): `docs/THREAT_MODEL.md` (13 threats incl. every one named in the plan,
+  controls, residual risks, non-goals, open issues, review record);
+  `server/src/middleware/upgradeLimit.ts`; `server/tests/hardening.test.ts`
+- Review findings fixed, each with a test: (1) WebSocket upgrades bypassed rate limiting — now
+  limited per client address before the credential check; (2) `/metrics` was exempt from rate
+  limiting — now limited (and not published by the proxy); (3) responses carrying credentials
+  had no cache directive — every response is now `Cache-Control: no-store`; (4) records of
+  revoked devices were kept forever — now deleted one day after revocation
+- Dependency check: `npm audit --omit=dev` — 0 vulnerabilities before and after. Full
+  `npm audit` first reported 6 (3 moderate, 1 high, 2 critical), all in the development-only
+  test runner chain; vitest upgraded 2.1.9 → 5.0.4; `npm audit` now reports 0. Android
+  dependencies were not scanned
+- Tests: server 53 (`npm test` on vitest 5.0.4; adds `hardening.test.ts` x11: security headers,
+  X-Forwarded-For spoofing with and without a trusted proxy, `/metrics` limit, client-address
+  derivation, attempt limiter, hostile JSON and identifiers, revoked-device purge, upgrade rate
+  limit, no credential in URL, oversized frame and token rotation closing sockets) — PASS
+- Build: `npm run typecheck`, `lint`, `format:check`, `build` — PASS
+- Known issues: no unresolved high-severity issue known; open medium/low items are listed in
+  `THREAT_MODEL.md` §5 (no app lock, no automatic token rotation, no forward secrecy, unpaired
+  device records not garbage-collected). No penetration test, fuzzing or second-person review
+- Commit message (relay part): `feat(security): harden relay and add threat model`
+
 ## Modules
 
 | # | Module | Status |
@@ -241,10 +301,10 @@ acceptance criteria need the server.
 | 6 | Companion inbox and local storage | COMPLETED |
 | 7 | OTP detection, copying and notifications | COMPLETED |
 | 8 | Persistent connectivity and background reliability | NOT STARTED |
-| 9 | Security hardening | NOT STARTED |
+| 9 | Security hardening | IN PROGRESS (relay and threat model done; Android pending) |
 | 10 | Backend deployment and configuration | COMPLETED (container files not executed: no Docker on dev host) |
 | 11 | Automated testing and end-to-end validation | NOT STARTED |
 | 12 | UX polish and accessibility | NOT STARTED |
 | 13 | Release builds and private installation | NOT STARTED |
 | 14 | Default SMS app support and remote sending | NOT STARTED |
-| — | CI and quality gates | NOT STARTED |
+| — | CI and quality gates | COMPLETED |

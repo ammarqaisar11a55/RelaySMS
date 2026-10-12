@@ -6,6 +6,7 @@ import { migrate } from './database/migrate.js';
 import { createPool } from './database/pool.js';
 import { startExpiryJob } from './jobs/expiry.js';
 import { authenticateUpgrade } from './middleware/auth.js';
+import { clientAddress, createAttemptLimiter } from './middleware/upgradeLimit.js';
 import { countPendingFor } from './modules/messages/messages.repo.js';
 import { Hub } from './realtime/hub.js';
 import { createLogger } from './security/logger.js';
@@ -34,6 +35,8 @@ async function main(): Promise<void> {
   server.headersTimeout = 15_000;
   server.keepAliveTimeout = 65_000;
 
+  // WebSocket upgrades bypass Express, so they get their own per-address limit.
+  const upgradeAllowed = createAttemptLimiter(config.RATE_LIMIT_WINDOW_SECONDS, config.RATE_LIMIT_MAX);
   hub.attach(
     server,
     WS_PATH,
@@ -47,6 +50,7 @@ async function main(): Promise<void> {
         .catch(() => undefined);
     },
     logger,
+    (req) => upgradeAllowed(clientAddress(req, config.TRUST_PROXY)),
   );
   const stopExpiry = startExpiryJob(ctx, metrics);
 

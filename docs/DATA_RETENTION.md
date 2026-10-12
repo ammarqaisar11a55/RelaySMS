@@ -21,7 +21,8 @@ in the phone's normal SMS app; RelaySMS never deletes or modifies them.
 | --- | --- |
 | Ciphertext of an undelivered message | Acknowledged by the companion, or `MESSAGE_TTL_HOURS` (72 by default), or the link is revoked |
 | Tombstone of a delivered message (ids, size, times; no ciphertext) | The message's original expiry time |
-| Device public keys, hashed credential, link | The device is deleted or revoked |
+| Device public keys, hashed credential | One day after the device is reset or deleted on the relay. A device that merely stops being used stays registered |
+| Link between two devices | Revoked by either phone, replaced by a new pairing, or either device is deleted |
 | Pairing session | One day after it expires |
 
 The relay never holds plaintext, sender addresses or codes.

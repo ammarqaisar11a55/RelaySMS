@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { AppContext } from '../../context.js';
+import { ipRateLimit } from '../../middleware/rateLimit.js';
 
 /** Process-level counters. Contain no identifiers and no message data. */
 export interface Metrics {
@@ -26,8 +27,12 @@ export function healthRouter(ctx: AppContext, metrics: Metrics): Router {
     }
   });
 
-  /** Aggregate operational numbers only. */
-  router.get('/metrics', async (_req, res) => {
+  /**
+   * Aggregate operational numbers only. Unlike the two probes above it queries the tables, so it
+   * is rate limited per client address.
+   */
+  const metricsLimit = ipRateLimit(ctx.config.RATE_LIMIT_WINDOW_SECONDS, ctx.config.RATE_LIMIT_MAX);
+  router.get('/metrics', metricsLimit, async (_req, res) => {
     const q = await ctx.db.query<{ devices: string; links: string; pending: string }>(
       `SELECT (SELECT COUNT(*) FROM devices WHERE revoked_at IS NULL) AS devices,
               (SELECT COUNT(*) FROM links) AS links,

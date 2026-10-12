@@ -2,11 +2,12 @@
 
 How to run your own RelaySMS relay, keep it running, back it up and upgrade it.
 
-> **Verification status.** Docker is not installed on the machine this project was developed on.
-> `server/Dockerfile`, `infra/compose.yaml` and `infra/reverse-proxy/Caddyfile` were written and
-> reviewed but **never built or started as containers**, and no public deployment was made.
-> What was executed instead is listed in [section 9](#9-what-was-verified). Treat the first
-> `docker compose up` as a test and run the smoke check in section 3 before pairing your phones.
+> **Verification status.** Docker is not installed on the machine this project was developed on,
+> and no public deployment was made. The image build, the Compose stack (database and relay), the
+> Caddyfile syntax, the smoke test and the backup commands are exercised by CI on GitHub's
+> runners; **Caddy serving real traffic with a real certificate has never been run.**
+> [Section 9](#9-what-was-verified) has the details. Treat your first `docker compose up` as a
+> test and run the smoke check in section 3 before pairing your phones.
 
 ## 1. What gets deployed
 
@@ -270,11 +271,21 @@ Executed on the development host (Linux, Node.js 22.22.1, PostgreSQL 18.6, no Do
   and invalid settings exit with status 78 naming only the variables; an unreachable database
   does not print the password; the health probe fails when the database is down.
 
-**Not executed:** `docker build`, `docker compose up`, Caddy (certificate issuance, WebSocket
-pass-through, the `/metrics` block, the body-size limit), container health checks, log rotation,
-the hardening options in `compose.yaml` (`read_only`, `cap_drop`, `no-new-privileges`), and
-PostgreSQL 17 (all tests here ran on 18.6). No deployment to a
-public host was made.
+Executed by CI on GitHub's runners (`.github/workflows/ci.yml`, job `deployment-files`; observed
+passing for commits `cf28179` and `fc3c97d`):
+
+- `docker compose config` with `.env.example`, and `caddy validate` on the Caddyfile.
+- `docker compose up --build --wait db relay`: the image builds, PostgreSQL 17 and the relay
+  start with the hardening options (`read_only`, `cap_drop`, `no-new-privileges`) and report
+  healthy; the relay runs as a non-root user.
+- `scripts/relay-smoke.mjs` from a container on the Compose network, the `pg_dump` /
+  `pg_restore` commands of section 6, and a stop of the relay with exit status 0.
+- The relay's own test suite against PostgreSQL 17 (job `server`).
+
+**Never executed anywhere:** the `proxy` container with real traffic — certificate issuance and
+renewal, WebSocket pass-through, the `/metrics` block and the body-size limit as Caddy applies
+them; log rotation over time; an upgrade or rollback of a running deployment; a deployment on a
+public host.
 
 ## 10. Running without Docker
 

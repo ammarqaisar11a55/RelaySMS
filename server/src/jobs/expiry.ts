@@ -1,11 +1,15 @@
 import type { AppContext } from '../context.js';
+import { deleteRevokedDevices } from '../modules/devices/devices.repo.js';
 import type { Metrics } from '../modules/health/health.routes.js';
 import { deleteExpiredMessages } from '../modules/messages/messages.repo.js';
 import { deleteOldPairings, expirePairings } from '../modules/pairing/pairing.repo.js';
 
 const DAY_MS = 24 * 3_600_000;
 
-/** Removes expired ciphertext and stale pairing sessions. Safe to run at any time, repeatedly. */
+/**
+ * Removes expired ciphertext, stale pairing sessions and the records of devices revoked more than
+ * a day ago. Safe to run at any time, repeatedly.
+ */
 export async function runExpiry(
   ctx: AppContext,
   metrics: Metrics,
@@ -14,6 +18,7 @@ export async function runExpiry(
   const messages = await deleteExpiredMessages(ctx.db, now);
   const pairings = await expirePairings(ctx.db, now);
   await deleteOldPairings(ctx.db, new Date(now.getTime() - DAY_MS));
+  await deleteRevokedDevices(ctx.db, new Date(now.getTime() - DAY_MS));
   metrics.expiredMessages += messages;
   metrics.expiredPairings += pairings;
   return { messages, pairings };

@@ -11,13 +11,16 @@ the secret. Binary values are base64url without padding.
 
 The relay never receives plaintext. `ciphertext` is opaque to it.
 
-## Health (no authentication, exempt from rate limits)
+## Health (no authentication)
 
 | Method | Path | Result |
 | --- | --- | --- |
 | GET | `/healthz` | `200 {"status":"ok"}` — process is up |
 | GET | `/readyz` | `200 {"status":"ready"}` or `503` — database reachable |
-| GET | `/metrics` | Aggregate counters only: uptime, active devices, links, pending messages, open connections, expired counts |
+| GET | `/metrics` | Aggregate counters only: uptime, active devices, links, pending messages, open connections, expired counts. Rate limited per client address; not published by the bundled reverse proxy |
+
+`/healthz` and `/readyz` are exempt from rate limits. Every response of the relay carries
+`Cache-Control: no-store`.
 
 ## Devices
 
@@ -80,6 +83,9 @@ and ignores anything the client sends:
 | `{"type":"delivery_updated"}` | The peer acknowledged something; refresh `awaitingPeer` |
 
 Events never contain message data. Close code `4401` means the credential was revoked or rotated.
+The credential is accepted only in the `Authorization` header, never in the URL. Connection
+attempts are rate limited per client address (`429`) before the credential is checked; frames
+larger than 1 KiB close the connection (`1009`).
 
 ## What the relay can observe
 
