@@ -303,7 +303,8 @@ acceptance criteria need the server.
   `THREAT_MODEL.md` §5 (no app lock, no automatic token rotation, no forward secrecy, unpaired
   device records not garbage-collected). No penetration test, fuzzing or second-person review
 - Commit (relay part): `d1a3b7e` — `feat(security): harden relay and add threat model`
-- Commit message (Android part): `feat(security): add app lock, credential renewal and release checks`
+- Commit (Android part): `9174421` — `feat(security): add app lock, credential renewal and release checks`
+- Push: SUCCESS; CI on GitHub passed for `d1a3b7e`, `031710e` and `9174421` (job conclusions read from the Actions API)
 
 ## Module 8 — Persistent connectivity and background reliability
 
@@ -331,6 +332,24 @@ acceptance criteria need the server.
 - Commit: `031710e` — `feat(background): keep delivery working in the background`
 - Push: SUCCESS
 
+## Module 11 — Automated testing and end-to-end validation
+
+- Status: `COMPLETED` for everything that can run without physical phones. **Real-device
+  validation: NOT PERFORMED** — no phone was attached; the checklist is in `TESTING.md` §4
+- Created: `docs/TESTING.md` (layers, commands, coverage, last results, real-device checklist,
+  what no test covers); `PairingFailureTest` (scripted relay: every pairing error, upload and
+  sync outcome, API client failures, runaway-paging guard); `PerformanceTest`;
+  `PerformanceOnDeviceTest` (1,500-message inbox, SMS handling time); `scripts/test-all.sh`
+- Acceptance: unit, backend and integration coverage listed in the plan exists and passes; the
+  twelve integration steps pass on the emulator; emulator results are kept separate from
+  real-device results, of which there are none
+- Tests: relay 55 — PASS; Android JVM 109 with relay — PASS; on-device 50 — PASS;
+  `emulator-sms-check.sh` 7/7, `emulator-forward-check.sh`, `emulator-reliability-check.sh` 15/15
+  — PASS; secret scan — no findings; SMS handling measured at 17–27 ms on the emulator
+- Build: `:app:assembleDebug`, `:app:lintDebug` — PASS
+- Known issues: battery impact and low-storage behaviour on real hardware are unmeasured
+- Commit message: `test(integration): verify end-to-end message delivery`
+
 ## Modules
 
 | # | Module | Status |
@@ -345,7 +364,7 @@ acceptance criteria need the server.
 | 8 | Persistent connectivity and background reliability | COMPLETED |
 | 9 | Security hardening | COMPLETED |
 | 10 | Backend deployment and configuration | COMPLETED (container files not executed: no Docker on dev host) |
-| 11 | Automated testing and end-to-end validation | NOT STARTED |
+| 11 | Automated testing and end-to-end validation | COMPLETED (emulator and JVM; real devices not tested) |
 | 12 | UX polish and accessibility | NOT STARTED |
 | 13 | Release builds and private installation | NOT STARTED |
 | 14 | Default SMS app support and remote sending | NOT STARTED |
