@@ -39,12 +39,23 @@ class SecurityOnDeviceTest {
         val exportedActivities = info.activities.orEmpty().filter { it.exported && it.name.startsWith(ours) }.map { it.name.removePrefix(ours) }
         assertEquals(listOf("MainActivity"), exportedActivities)
 
+        // Every exported receiver and service demands a permission that only the system holds,
+        // so no other app can fake an incoming SMS, an MMS notice or a quick reply.
         val exportedReceivers = info.receivers.orEmpty().filter { it.exported && it.name.startsWith(ours) }
-        assertEquals(listOf("sms.SmsReceiver"), exportedReceivers.map { it.name.removePrefix(ours) })
-        // Only the system holds BROADCAST_SMS, so no app can fake an incoming SMS.
-        assertEquals("android.permission.BROADCAST_SMS", exportedReceivers.single().permission)
-
-        assertTrue(info.services.orEmpty().none { it.exported && it.name.startsWith(ours) })
+        assertEquals(
+            mapOf(
+                "sms.SmsReceiver" to "android.permission.BROADCAST_SMS",
+                "sms.defaultapp.SmsDeliverReceiver" to "android.permission.BROADCAST_SMS",
+                "sms.defaultapp.MmsDeliverReceiver" to "android.permission.BROADCAST_WAP_PUSH",
+            ),
+            exportedReceivers.associate { it.name.removePrefix(ours) to it.permission },
+        )
+        assertEquals(
+            mapOf("sms.defaultapp.RespondViaMessageService" to "android.permission.SEND_RESPOND_VIA_MESSAGE"),
+            info.services.orEmpty().filter { it.exported && it.name.startsWith(ours) }.associate { it.name.removePrefix(ours) to it.permission },
+        )
+        // The receiver for send outcomes is private to the app.
+        assertTrue(info.receivers.orEmpty().single { it.name.endsWith("SmsOutcomeReceiver") }.let { !it.exported })
         assertTrue(info.providers.orEmpty().none { it.exported && it.name.startsWith(ours) })
         // Third-party components that are exported must at least demand a permission.
         val unguarded = info.receivers.orEmpty().filter { it.exported && !it.name.startsWith(ours) && it.permission == null }.map { it.name } +
@@ -63,9 +74,13 @@ class SecurityOnDeviceTest {
             "android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING", "android.permission.POST_NOTIFICATIONS",
             "android.permission.RECEIVE_BOOT_COMPLETED", "android.permission.WAKE_LOCK", "android.permission.USE_BIOMETRIC",
             "android.permission.USE_FINGERPRINT",
+            // Declared for the optional features; granted only by the user's own action:
+            // remote sending (SEND_SMS) or making RelaySMS the default SMS app (the rest).
+            "android.permission.SEND_SMS", "android.permission.READ_SMS",
+            "android.permission.RECEIVE_MMS", "android.permission.RECEIVE_WAP_PUSH",
         )
         assertEquals("permissions beyond the documented set", emptySet<String>(), declared - allowed)
-        for (never in listOf("READ_CONTACTS", "ACCESS_FINE_LOCATION", "READ_SMS", "SEND_SMS", "BIND_ACCESSIBILITY_SERVICE", "READ_PHONE_STATE")) {
+        for (never in listOf("READ_CONTACTS", "ACCESS_FINE_LOCATION", "BIND_ACCESSIBILITY_SERVICE", "READ_PHONE_STATE", "CALL_PHONE", "READ_CALL_LOG")) {
             assertTrue("$never must not be declared", declared.none { it.endsWith(never) })
         }
     }

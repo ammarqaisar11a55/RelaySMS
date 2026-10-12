@@ -27,7 +27,7 @@ tests and lint, the container build with a Compose smoke test, and a secret scan
 
 ## 2. What the automated tests cover
 
-**Relay (55 tests):** configuration validation; registration and token hashing; missing, wrong and
+**Relay (62 tests):** configuration validation; registration and token hashing; missing, wrong and
 cross-device credentials; credential rotation and its grace period; pairing expiry, replay, wrong
 secret lock-out, roles, cancellation, re-pairing; signed upload, duplicate submission before and
 after acknowledgement, acknowledgement scoping, forged and redirected messages, size limits, queue
@@ -35,7 +35,7 @@ bound, paging, expiry; revocation; rate limits (per address, registration, pairi
 upgrade, metrics); consistent errors; database failure; log redaction; WebSocket authentication,
 hints, presence and revocation; startup and shutdown behaviour.
 
-**Android JVM (109 tests):** sender matching and allowlist policy; multipart assembly and event
+**Android JVM (129 tests):** sender matching and allowlist policy; multipart assembly and event
 ids; the incoming-SMS decision logic (off, unpaired, filtered, duplicate, queue full, malformed,
 storage error); HPKE and signature properties; QR payload validation, pairing proof, safety code;
 envelope sealing and every rejection reason; OTP detection (33 positive and negative cases,
@@ -47,7 +47,7 @@ roles, hostile relay and forged QR, revocation, restart, transport (lost acknowl
 failure, offline queueing over several pages, altered ciphertext, cross-pair injection), live
 channel, credential rotation with a lost answer.
 
-**Android on-device (50 tests):** onboarding and role reset; Room queue behaviour; schema migration
+**Android on-device (61 tests):** onboarding and role reset; Room queue behaviour; schema migration
 1→2 with data; Keystore-backed storage, including the reset regression; pairing through the real
 UI in both roles; transport with real storage and UI; inbox list, filters, search, sort, detail,
 copy, delete, retention, restart persistence; notifications (generic, preview, lock-screen
@@ -63,7 +63,9 @@ Run on 2026-10-12 on the Android 15 (API 35) `google_apis` emulator, relay on th
 | `emulator-sms-check.sh` | Real `SMS_RECEIVED` handling: permission denied, allowed sender queued, unlisted sender filtered, multipart reassembled, process killed, forwarding paused, nothing sensitive in logcat | 7/7 PASS |
 | `emulator-forward-check.sh` | The 12 integration steps of the plan in one run: SMS injected into the modem → detected → filtered → encrypted → relay holds only ciphertext → companion retrieves, decrypts and stores → acknowledged → not shown twice; filtered sender never forwarded; no plaintext in the relay database or app log | PASS |
 | `emulator-reliability-check.sh` | Source: screen off, process killed, offline, relay stalled, device restart. Companion with background connection: screen off, offline, device restart | 15/15 PASS (see `RELIABILITY.md`) |
-| `device-e2e.sh` | The instrumented suite | 50/50 PASS |
+| `emulator-default-sms-check.sh` | Default SMS role state, system SMS store written once and cleaned up, `SMS_DELIVER`, role loss, remote sending by the real `SmsManager`, refusal when switched off | 12/12 PASS (see `DEFAULT_SMS.md`) |
+| `release-smoke.sh` | The minified build at runtime: onboarding, keys, pairing, encrypted message, restart | PASS |
+| `device-e2e.sh` | The instrumented suite | 61/61 PASS |
 
 Measured on the emulator: handling one incoming SMS (parse, filter, encrypt, store, schedule) took
 17 ms for the first message and a median of 24 ms (maximum 27 ms) for three-part messages, against
@@ -101,6 +103,9 @@ yourself before trying any bank message.
 | 16 | S25 without a SIM, on Wi-Fi only, receives messages | – | ☐ |
 | 17 | Battery use of each app over a normal day | ☐ | ☐ |
 | 18 | Second SIM in the source phone, if used | ☐ | – |
+| 19 | Set RelaySMS as default SMS app through Android's dialog; forwarded messages appear once in the system store; switch back | – | ☐ |
+| 20 | Turn on remote sending; send from the S25 through the source phone to a real number; "Sent" and delivery report | ☐ | ☐ |
+| 21 | Remote sending with the source offline, then online; and after revoking the companion | ☐ | ☐ |
 
 Useful commands with a phone attached:
 

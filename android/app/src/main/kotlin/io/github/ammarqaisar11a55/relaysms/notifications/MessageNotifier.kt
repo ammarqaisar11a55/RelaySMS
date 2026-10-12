@@ -114,6 +114,22 @@ class MessageNotifier(private val context: Context) {
         }
     }
 
+    /** A content-free notice, used when a message was stored outside RelaySMS's own inbox. */
+    fun notifyGeneric(text: String) {
+        if (!canPost()) return
+        ensureChannel()
+        try {
+            manager.notify(
+                SUMMARY_ID,
+                NotificationCompat.Builder(context, CHANNEL_ID).setSmallIcon(R.drawable.ic_stat_relay)
+                    .setContentTitle(NotificationText.GENERIC_TITLE).setContentText(text).setAutoCancel(true)
+                    .setVisibility(NotificationCompat.VISIBILITY_PRIVATE).build(),
+            )
+        } catch (e: SecurityException) {
+            // Permission revoked meanwhile.
+        }
+    }
+
     /** The user is looking at the inbox: clear what was announced. */
     @Synchronized
     fun clearAll() {

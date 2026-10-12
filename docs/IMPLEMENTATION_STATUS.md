@@ -437,7 +437,42 @@ acceptance criteria need the server.
 - Not verified: a signed release build (no signing key exists yet), the release workflow run,
   installation from a file on a physical phone
 - Known issues: none known in the build; see `INSTALL.md` §8
-- Commit message: `feat(release): add release build, GitHub release workflow and install guide`
+- Commit: `5950510` — `feat(release): add release build, GitHub release workflow and install guide`
+- Push: SUCCESS
+
+## Module 14 — Default SMS app support and remote sending
+
+- Status: `COMPLETED` on the emulator. **Not verified on the Galaxy S25 Ultra**, which the
+  requirement names: role eligibility for a file-installed app, Samsung firmware behaviour and
+  interoperability with Samsung/Google Messages are open
+- Created: `sms/defaultapp/DefaultSmsRole` (RoleManager, legacy fallback, settings intent),
+  `SmsDeliverReceiver`, `MmsDeliverReceiver` (notice only; MMS is not supported),
+  `RespondViaMessageService`, `ACTION_SENDTO` handling, `ProviderMirror` +
+  `SmsProviderGateway` (one system row per message, read/delete/retention follow, backfill when
+  the role is gained, nothing written without the role); `sms/send/*`: `RemoteSendPolicy`,
+  `SendRequestHandler` (durable replay protection, hourly limit, expiry), `AndroidSmsSender` +
+  `SmsOutcomeReceiver` (sent and delivered reported separately), `OutgoingMessages`,
+  envelope kinds `send_request` / `send_result`; Room v3 (`send_requests`) with `MIGRATION_2_3`;
+  compose screen with route choice and confirmation; outgoing status in inbox and detail;
+  settings: "Default SMS application" (companion) and "Sending from the companion" (source);
+  `docs/DEFAULT_SMS.md`; protocol §5.5; threat model T14, T15
+- Acceptance: role requested through the supported API; approve/decline handled; role state
+  detected; handler components implemented; forwarded messages stored without duplicates;
+  companion inbox works without a SIM; compose behaves correctly without cellular service;
+  authorised remote sending works when the source is online and permitted; unauthorised and
+  replayed requests rejected; revocation prevents further sending; switching away does not
+  corrupt messages — met on the emulator, except that Android's role dialog itself was not
+  tapped through (the role was granted with `adb shell cmd role`)
+- Tests: Android JVM 129 with relay (adds `RemoteSendTest` x11, `RemoteSendIntegrationTest` x6)
+  — PASS; on-device 61 (adds `DefaultSmsOnDeviceTest` x9, migration to v3, updated component and
+  permission audit) — PASS; `emulator-default-sms-check.sh` 12/12 — PASS (real system SMS store,
+  real `SMS_DELIVER`, real `SmsManager` send as source); `emulator-forward-check.sh` — PASS;
+  `release-check.sh` — PASS; lint — PASS
+- Defect found and fixed: catching up the system SMS store after gaining the role ran only from
+  the app container, not from the repository's housekeeping
+- Known issues: no MMS; the default SIM is always used for sending; "Sent" cannot distinguish
+  carrier refusal reasons; Google Play SMS and default-handler policy not assessed
+- Commit message: `feat(sms): add default SMS app support and sending through the source phone`
 
 ## Modules
 
@@ -456,5 +491,5 @@ acceptance criteria need the server.
 | 11 | Automated testing and end-to-end validation | COMPLETED (emulator and JVM; real devices not tested) |
 | 12 | UX polish and accessibility | COMPLETED |
 | 13 | Release builds and private installation | COMPLETED (no release published yet) |
-| 14 | Default SMS app support and remote sending | NOT STARTED |
+| 14 | Default SMS app support and remote sending | COMPLETED (emulator; S25 Ultra not tested) |
 | — | CI and quality gates | COMPLETED |

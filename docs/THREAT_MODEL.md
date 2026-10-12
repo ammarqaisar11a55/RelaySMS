@@ -237,6 +237,30 @@ Each entry: what could happen, what stops or limits it, and what remains.
   `RATE_LIMIT_REGISTRATION_MAX` per address per hour) and are not garbage-collected. Set the
   code on any internet-facing relay.
 
+### T14. Someone makes the source phone send SMS
+
+- *Scenario:* an attacker wants messages sent from the user's number (fraud, premium numbers,
+  impersonation), through the remote-sending feature.
+- *Controls:* the feature is off until the source phone's owner turns it on and grants the SMS
+  permission; requests are accepted only when signed by the paired companion and encrypted to the
+  source (*tested*); the relay cannot forge, read or redirect them (*tested*: cross-pair
+  injection is refused); each request id is honoured once, across restarts (*tested*); requests
+  expire after an hour; an hourly limit bounds damage (*tested*); recipients must be plain numbers
+  and text is bounded; revocation ends it at once (*tested*). Nothing is sent without a
+  confirmation on the companion.
+- *Residual:* whoever controls an unlocked, paired companion can send up to the hourly limit from
+  the user's number until the source phone's owner turns the feature off or revokes the
+  companion. The app lock on the companion and a low limit reduce this. The feature should stay
+  off if it is not needed.
+
+### T15. Messages copied into Android's SMS store
+
+- *Scenario:* RelaySMS is the default SMS app, so forwarded messages are also written to the
+  system SMS store.
+- *Residual, by design of Android:* that store is not encrypted by RelaySMS and any app with the
+  SMS permission can read it. The app says so before the role is requested. Users who do not want
+  this should not make RelaySMS the default.
+
 ## 4. Deliberate non-goals
 
 - Hiding from the relay *that* two devices talk, when, and how much.

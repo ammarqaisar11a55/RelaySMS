@@ -39,7 +39,7 @@ class MigrationTest {
             close()
         }
         // Validates the migrated schema against the exported schema of each version on the way.
-        helper.runMigrationsAndValidate(name, 2, true, *Migrations.ALL)
+        helper.runMigrationsAndValidate(name, 3, true, *Migrations.ALL)
 
         val db = Room.databaseBuilder(ApplicationProvider.getApplicationContext(), AppDatabase::class.java, name)
             .addMigrations(*Migrations.ALL).build()
@@ -53,6 +53,8 @@ class MigrationTest {
             // The table added by the migration works.
             assertEquals(0, db.messageDao().count())
             assertEquals(0, db.messageDao().observeUnreadCount().first())
+            // v3: the source phone's request log.
+            assertEquals(0, db.sendRequestDao().sentSince(0))
         } finally {
             db.close()
             ApplicationProvider.getApplicationContext<android.content.Context>().deleteDatabase(name)

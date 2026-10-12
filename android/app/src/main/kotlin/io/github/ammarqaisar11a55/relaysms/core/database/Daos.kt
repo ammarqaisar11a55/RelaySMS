@@ -110,6 +110,13 @@ interface MessageDao {
     @Query("UPDATE messages SET status = :status WHERE id = :id")
     suspend fun setStatus(id: String, status: String)
 
+    /** Changes an outgoing message's status only from one of [from], so a late result cannot undo a later one. */
+    @Query("UPDATE messages SET status = :status WHERE id = :id AND direction = 1 AND status IN (:from)")
+    suspend fun advanceStatus(id: String, status: String, from: List<String>): Int
+
+    @Query("UPDATE messages SET status = :status WHERE direction = 1 AND status = 'pending' AND received_at < :cutoff")
+    suspend fun failPendingOlderThan(cutoff: Long, status: String): Int
+
     @Query("UPDATE messages SET provider_id = :providerId WHERE id = :id")
     suspend fun setProviderId(id: String, providerId: Long?)
 
@@ -140,3 +147,26 @@ interface MessageDao {
 }
 
 data class ProviderRef(val id: String, @androidx.room.ColumnInfo(name = "provider_id") val providerId: Long?)
+
+@Dao
+interface SendRequestDao {
+    /** @return row id, or -1 when this request id was seen before. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIfAbsent(row: SendRequestEntity): Long
+
+    @Query("SELECT * FROM send_requests WHERE id = :id")
+    suspend fun find(id: String): SendRequestEntity?
+
+    @Query("UPDATE send_requests SET status = :status, reason = :reason WHERE id = :id")
+    suspend fun setStatus(id: String, status: String, reason: String?)
+
+    @Query("SELECT COUNT(*) FROM send_requests WHERE received_at >= :since AND status IN ('sending', 'sent', 'delivered')")
+    suspend fun sentSince(since: Long): Int
+
+    @Query("SELECT COUNT(*) FROM send_requests WHERE received_at >= :since AND status IN ('sending', 'sent', 'delivered')")
+    fun observeSentSince(since: Long): Flow<Int>
+
+    /** Ids are kept well beyond the time a request can still be valid, then dropped. */
+    @Query("DELETE FROM send_requests WHERE received_at < :cutoff")
+    suspend fun deleteOlderThan(cutoff: Long): Int
+}

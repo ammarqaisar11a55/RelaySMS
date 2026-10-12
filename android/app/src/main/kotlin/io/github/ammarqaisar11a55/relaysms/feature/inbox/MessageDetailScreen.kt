@@ -40,7 +40,10 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.ammarqaisar11a55.relaysms.core.database.MessageDirection
 import io.github.ammarqaisar11a55.relaysms.core.database.MessageOrigin
+import io.github.ammarqaisar11a55.relaysms.core.database.MessageStatus
+import io.github.ammarqaisar11a55.relaysms.sms.send.RemoteSendPolicy
 import io.github.ammarqaisar11a55.relaysms.inbox.InboxMessage
 import io.github.ammarqaisar11a55.relaysms.otp.OtpDetector
 import io.github.ammarqaisar11a55.relaysms.otp.OtpResult
@@ -102,7 +105,7 @@ fun MessageDetailScreen(messageId: String, onBack: () -> Unit) {
                 onAction = onBack,
             )
             else -> {
-                val otp = remember(message.body) { OtpDetector.detect(message.body) }
+                val otp = remember(message.body, message.direction) { if (message.direction == MessageDirection.OUTGOING) OtpResult.NONE else OtpDetector.detect(message.body) }
                 Column(
                     Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -114,11 +117,24 @@ fun MessageDetailScreen(messageId: String, onBack: () -> Unit) {
                     FullWidthButton("Copy whole message", onClick = { copy(message.body, "Message") }, outlined = true, modifier = Modifier.testTag("message_copy_all"))
 
                     SectionHeader("Details")
+                    if (message.direction == MessageDirection.OUTGOING) {
+                        val (label, _) = outgoingStatusLabel(message.status, message.origin)
+                        DetailLine("To", message.address)
+                        DetailLine("Status", label)
+                        if (MessageStatus.isFailed(message.status)) {
+                            DetailLine("Why", RemoteSendPolicy.describe(MessageStatus.failureReason(message.status)))
+                        } else if (message.status == MessageStatus.SENT) {
+                            DetailLine("Note", "Handed to the mobile network. Delivery to the recipient is confirmed only if the network reports it.")
+                        }
+                        DetailLine("Written", Times.full(message.receivedAtMillis))
+                        DetailLine("Sent with", if (message.origin == MessageOrigin.RELAY) "Paired source phone" else "This phone's SIM")
+                    } else {
                     DetailLine("From", message.address)
                     DetailLine("Received by source phone", Times.full(message.receivedAtMillis))
                     DetailLine("Stored on this phone", Times.full(message.storedAtMillis))
                     DetailLine("Arrived via", if (message.origin == MessageOrigin.RELAY) "Relay, end-to-end encrypted" else "This phone's SIM")
                     if (message.partCount > 1) DetailLine("SMS parts", message.partCount.toString())
+                    }
                 }
             }
         }

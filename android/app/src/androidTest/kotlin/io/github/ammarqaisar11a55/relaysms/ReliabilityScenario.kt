@@ -44,6 +44,15 @@ class ReliabilityScenario {
         }
     }
 
+    /** App as source with remote sending allowed; the script grants SEND_SMS beforehand. */
+    @Test fun setupRemoteSendSource() {
+        assumeTrue(args.getString("step") == "setupRemoteSendSource")
+        setup(DeviceRole.SOURCE) {
+            container.preferences.setRemoteSendingEnabled(args.getString("remote") != "off")
+            container.preferences.setRemoteSendPerHour(5)
+        }
+    }
+
     @Test fun setupCompanion() {
         assumeTrue(args.getString("step") == "setupCompanion")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

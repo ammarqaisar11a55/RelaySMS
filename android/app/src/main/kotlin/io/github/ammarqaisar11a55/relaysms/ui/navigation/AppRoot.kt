@@ -8,6 +8,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -19,6 +20,7 @@ import io.github.ammarqaisar11a55.relaysms.core.model.DeviceRole
 import io.github.ammarqaisar11a55.relaysms.core.model.ThemeMode
 import io.github.ammarqaisar11a55.relaysms.core.prefs.AppSettings
 import io.github.ammarqaisar11a55.relaysms.feature.filters.SenderFiltersScreen
+import io.github.ammarqaisar11a55.relaysms.feature.inbox.ComposeScreen
 import io.github.ammarqaisar11a55.relaysms.feature.inbox.InboxScreen
 import io.github.ammarqaisar11a55.relaysms.feature.inbox.MessageDetailScreen
 import io.github.ammarqaisar11a55.relaysms.feature.home.SourceHomeScreen
@@ -62,6 +64,13 @@ private fun AppNavHost(settings: AppSettings) {
     val back: () -> Unit = { nav.popBackStack() }
     val container = LocalAppContainer.current
     val openMessage by container.openMessageRequests.collectAsStateWithLifecycle()
+    val composeRequest by container.composeRequests.collectAsStateWithLifecycle()
+    LaunchedEffect(composeRequest, settings.role) {
+        // An sms: link opened RelaySMS. Only the companion role has a compose screen.
+        if (composeRequest != null) {
+            if (settings.role == DeviceRole.COMPANION) nav.navigate(Routes.COMPANION_COMPOSE) { launchSingleTop = true } else container.composeRequests.value = null
+        }
+    }
     LaunchedEffect(openMessage, settings.role) {
         val id = openMessage ?: return@LaunchedEffect
         container.openMessageRequests.value = null
@@ -84,10 +93,15 @@ private fun AppNavHost(settings: AppSettings) {
             InboxScreen(
                 settings,
                 onOpenMessage = { nav.navigate(Routes.message(it)) },
+                onCompose = { nav.navigate(Routes.COMPANION_COMPOSE) },
                 onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                 onOpenPairing = { nav.navigate(Routes.PAIRING) },
                 onOpenDevice = { nav.navigate(Routes.PAIRED_DEVICE) },
             )
+        }
+        composable(Routes.COMPANION_COMPOSE) {
+            val prefill = remember { container.composeRequests.value.also { container.composeRequests.value = null } }
+            ComposeScreen(initialTo = prefill?.first.orEmpty(), initialText = prefill?.second.orEmpty(), onBack = back)
         }
         composable(Routes.COMPANION_MESSAGE) { entry ->
             MessageDetailScreen(messageId = entry.arguments?.getString("id").orEmpty(), onBack = back)

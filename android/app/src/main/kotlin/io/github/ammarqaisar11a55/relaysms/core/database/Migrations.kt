@@ -24,5 +24,16 @@ object Migrations {
         }
     }
 
-    val ALL = arrayOf(MIGRATION_1_2)
+    /** v3 adds the source phone's log of remote send requests. */
+    val MIGRATION_2_3 = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `send_requests` (`id` TEXT NOT NULL, `received_at` INTEGER NOT NULL, " +
+                    "`status` TEXT NOT NULL, `reason` TEXT, PRIMARY KEY(`id`))",
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_send_requests_received_at` ON `send_requests` (`received_at`)")
+        }
+    }
+
+    val ALL = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
 }

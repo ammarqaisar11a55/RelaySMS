@@ -41,6 +41,10 @@ data class AppSettings(
     val appLock: Boolean = false,
     /** Keep the app out of screenshots, screen recordings and the recent-apps preview. */
     val blockScreenshots: Boolean = true,
+    /** Source phone: allow the paired companion to send SMS through this phone's SIM. Off by default. */
+    val remoteSendingEnabled: Boolean = false,
+    /** Source phone: most SMS the companion may send through this phone per hour. */
+    val remoteSendPerHour: Int = 20,
 ) {
     val onboardingComplete: Boolean get() = role != null
 
@@ -80,6 +84,8 @@ class AppPreferences(private val store: DataStore<Preferences>) {
                 backgroundConnection = p[KEY_BACKGROUND_CONNECTION] ?: false,
                 appLock = p[KEY_APP_LOCK] ?: false,
                 blockScreenshots = p[KEY_BLOCK_SCREENSHOTS] ?: true,
+                remoteSendingEnabled = p[KEY_REMOTE_SENDING] ?: false,
+                remoteSendPerHour = (p[KEY_REMOTE_SEND_PER_HOUR] ?: 20).coerceIn(1, 60),
             )
         }
 
@@ -102,6 +108,10 @@ class AppPreferences(private val store: DataStore<Preferences>) {
     suspend fun setAllowlistOnly(enabled: Boolean) = store.edit { it[KEY_ALLOWLIST_ONLY] = enabled }
 
     suspend fun setRetentionDays(days: Int) = store.edit { it[KEY_RETENTION_DAYS] = days }
+
+    suspend fun setRemoteSendingEnabled(enabled: Boolean) = store.edit { it[KEY_REMOTE_SENDING] = enabled }
+
+    suspend fun setRemoteSendPerHour(limit: Int) = store.edit { it[KEY_REMOTE_SEND_PER_HOUR] = limit }
 
     suspend fun setAppLock(enabled: Boolean) = store.edit { it[KEY_APP_LOCK] = enabled }
 
@@ -144,6 +154,8 @@ class AppPreferences(private val store: DataStore<Preferences>) {
         val KEY_FORWARDING = booleanPreferencesKey("forwarding_enabled")
         val KEY_ALLOWLIST_ONLY = booleanPreferencesKey("allowlist_only")
         val KEY_RETENTION_DAYS = intPreferencesKey("retention_days")
+        val KEY_REMOTE_SENDING = booleanPreferencesKey("remote_sending_enabled")
+        val KEY_REMOTE_SEND_PER_HOUR = intPreferencesKey("remote_send_per_hour")
         val KEY_APP_LOCK = booleanPreferencesKey("app_lock")
         val KEY_BLOCK_SCREENSHOTS = booleanPreferencesKey("block_screenshots")
         val KEY_BACKGROUND_CONNECTION = booleanPreferencesKey("background_connection")

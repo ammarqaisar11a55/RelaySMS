@@ -23,10 +23,12 @@ and login and banking codes need to be readable on another phone.
 
 - It does not replace your SIM, register a phone with PTA, or bypass any network or Android
   restriction.
-- It does not put messages into Google Messages or the system SMS inbox. Forwarded messages
-  appear inside RelaySMS.
-- It does not send SMS from the companion phone, enter codes into other apps, or read your
-  existing SMS history.
+- By default it does not put messages into Google Messages or the system SMS store; forwarded
+  messages appear inside RelaySMS. Only if you choose to make RelaySMS the default SMS app are
+  copies written to Android's SMS store (see [docs/DEFAULT_SMS.md](docs/DEFAULT_SMS.md)).
+- It does not send anything on its own. Sending through the source phone is an optional feature
+  that is off until the source phone's owner turns it on, and each message is confirmed by you.
+- It does not enter codes into other apps, read your existing SMS history, or handle MMS.
 - It does not guarantee instant delivery. Both phones need internet access, and Android decides
   when background apps may run (see [docs/RELIABILITY.md](docs/RELIABILITY.md)).
 - It is not on Google Play and makes no claim of Play approval. It is installed from an APK.
@@ -68,7 +70,10 @@ Google Tink. The relay is Node.js/TypeScript with PostgreSQL and runs either as 
 | Notifications | Companion | When you turn notifications on | To announce new messages |
 | Internet, network state, boot, foreground service | Both | Granted at install | Delivery, retry after restart, optional background connection |
 
-The companion phone is never asked for SMS access. If Android silently refuses the SMS permission
+| Send SMS | Source | Only if you turn on "Let the companion send SMS through this phone" | Optional remote sending |
+| SMS read/send/MMS | Companion | Only if you make RelaySMS the default SMS app; Android grants them with the role | Required of a default SMS app |
+
+In normal use the companion phone is never asked for SMS access. If Android silently refuses the SMS permission
 on the source phone, the app was installed from a file and needs *App info → ⋮ → Allow restricted
 settings* first; the app explains this when it happens.
 
@@ -136,4 +141,4 @@ been run on physical phones or with a real carrier**; the checklist for that is 
 [Feasibility](docs/FEASIBILITY.md) · [Protocol](docs/PROTOCOL.md) · [Relay API](docs/API.md) ·
 [Threat model](docs/THREAT_MODEL.md) · [Reliability](docs/RELIABILITY.md) ·
 [Data retention](docs/DATA_RETENTION.md) · [Deployment](docs/DEPLOYMENT.md) ·
-[Vercel](docs/VERCEL.md) · [Install](docs/INSTALL.md) · [Testing](docs/TESTING.md)
+[Vercel](docs/VERCEL.md) · [Default SMS app and sending](docs/DEFAULT_SMS.md) · [Install](docs/INSTALL.md) · [Testing](docs/TESTING.md)

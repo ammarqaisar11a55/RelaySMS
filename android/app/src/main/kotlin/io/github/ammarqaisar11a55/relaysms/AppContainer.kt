@@ -29,6 +29,22 @@ import io.github.ammarqaisar11a55.relaysms.delivery.OutboxTransport
 import io.github.ammarqaisar11a55.relaysms.delivery.SyncWorker
 import io.github.ammarqaisar11a55.relaysms.feature.inbox.ClipboardClearer
 import io.github.ammarqaisar11a55.relaysms.inbox.InboxRepository
+import io.github.ammarqaisar11a55.relaysms.inbox.MessageMirror
+import io.github.ammarqaisar11a55.relaysms.sms.defaultapp.AndroidSmsProviderGateway
+import io.github.ammarqaisar11a55.relaysms.sms.defaultapp.DefaultSmsRole
+import io.github.ammarqaisar11a55.relaysms.sms.defaultapp.ProviderMirror
+import io.github.ammarqaisar11a55.relaysms.sms.defaultapp.SmsProviderGateway
+import io.github.ammarqaisar11a55.relaysms.sms.send.AndroidSmsSender
+import io.github.ammarqaisar11a55.relaysms.sms.send.EnvelopeQueue
+import io.github.ammarqaisar11a55.relaysms.sms.send.OutgoingMessages
+import io.github.ammarqaisar11a55.relaysms.sms.send.RoomSendRequestLog
+import io.github.ammarqaisar11a55.relaysms.sms.send.SendIds
+import io.github.ammarqaisar11a55.relaysms.sms.send.SendKinds
+import io.github.ammarqaisar11a55.relaysms.sms.send.SendRequestHandler
+import io.github.ammarqaisar11a55.relaysms.sms.send.SendResult
+import io.github.ammarqaisar11a55.relaysms.sms.send.SendSettings
+import io.github.ammarqaisar11a55.relaysms.sms.send.SendStatus
+import io.github.ammarqaisar11a55.relaysms.sms.send.SmsSendOutcome
 import io.github.ammarqaisar11a55.relaysms.notifications.MessageNotifier
 import io.github.ammarqaisar11a55.relaysms.otp.OtpDetector
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -120,9 +136,63 @@ class AppContainer(context: Context) {
         RelayOutboxTransport(identityStore, { deviceKeys.loadOrCreate() }, apiFactory, onAuthorizationLost = { linkMonitor.refresh() })
     }
 
-    val inboxRepository: InboxRepository by lazy {
-        InboxRepository(database.messageDao(), localCipher, detectsOtp = OtpDetector::looksLikeOtp)
+    val smsProviderGateway: SmsProviderGateway by lazy { AndroidSmsProviderGateway(appContext) }
+
+    /** Copies inbox messages into Android's SMS store, only while RelaySMS is the default SMS app. */
+    val providerMirror: ProviderMirror by lazy {
+        ProviderMirror(database.messageDao(), smsProviderGateway, { DefaultSmsRole.isHeld(appContext) }, { inboxRepository.reveal(it) })
     }
+
+    val inboxRepository: InboxRepository by lazy {
+        InboxRepository(
+            database.messageDao(), localCipher, detectsOtp = OtpDetector::looksLikeOtp,
+            mirror = object : MessageMirror {
+                override suspend fun onStored() = providerMirror.onStored()
+                override suspend fun onRead(providerId: Long) = providerMirror.onRead(providerId)
+                override suspend fun onDeleted(providerIds: List<Long>) = providerMirror.onDeleted(providerIds)
+            },
+        )
+    }
+
+    val smsSender: AndroidSmsSender by lazy { AndroidSmsSender(appContext) }
+
+    private val envelopeQueue: EnvelopeQueue by lazy { EnvelopeQueue(sourceStores, localCipher, deliveryScheduler) { System.currentTimeMillis() } }
+
+    /** Companion phone: messages the user asked to send. */
+    val outgoingMessages: OutgoingMessages by lazy {
+        OutgoingMessages(inboxRepository, envelopeQueue, smsSender, isPaired = { identityStore.peer.value != null })
+    }
+
+    /** Source phone: acts on send requests from the paired companion, if the owner allowed it. */
+    val sendRequestHandler: SendRequestHandler by lazy {
+        SendRequestHandler(
+            settings = object : SendSettings {
+                override suspend fun enabled() = preferences.current().remoteSendingEnabled
+                override suspend fun perHourLimit() = preferences.current().remoteSendPerHour
+            },
+            sender = smsSender,
+            log = RoomSendRequestLog(database.sendRequestDao()),
+            reporter = { result ->
+                envelopeQueue.enqueue(SendIds.resultId(result.requestId, result.status), SendKinds.RESULT, SendResult.serializer(), result)
+            },
+        )
+    }
+
+    /** Verdict of the phone's SMS stack for a message this app sent, for either role. */
+    suspend fun onSmsOutcome(requestId: String, outcome: SmsSendOutcome) {
+        if (database.sendRequestDao().find(requestId) != null) {
+            sendRequestHandler.onOutcome(requestId, outcome)
+        } else {
+            when (outcome) {
+                SmsSendOutcome.Sent -> inboxRepository.applySendResult(requestId, SendStatus.SENT, null)
+                SmsSendOutcome.Delivered -> inboxRepository.applySendResult(requestId, SendStatus.DELIVERED, null)
+                is SmsSendOutcome.Failed -> inboxRepository.applySendResult(requestId, SendStatus.FAILED, outcome.reason)
+            }
+        }
+    }
+
+    /** Message to prefill in the compose screen, from an sms: link or another app's share. */
+    val composeRequests = MutableStateFlow<Pair<String, String>?>(null)
 
     val clipboardClearer: ClipboardClearer by lazy {
         ClipboardClearer(appContext, appScope) { preferences.current().clipboardClearSeconds }
@@ -131,12 +201,16 @@ class AppContainer(context: Context) {
     /** Erases messages past the retention period. Cheap; called at start and after each sync. */
     suspend fun applyRetention() {
         runCatching { inboxRepository.applyRetention(preferences.current().retentionDays) }
+        runCatching { outgoingMessages.sweep() }
+        runCatching { database.sendRequestDao().deleteOlderThan(System.currentTimeMillis() - 7L * 24 * 3_600_000) }
+        // Catches up after the default SMS role was granted while the app was not running.
+        runCatching { providerMirror.onStored() }
     }
 
     val relaySync: RelaySync by lazy {
         RelaySync(
             identityStore, { deviceKeys.loadOrCreate() }, apiFactory,
-            handler = EnvelopeRouter({ preferences.current().role }, inboxRepository),
+            handler = EnvelopeRouter({ preferences.current().role }, inboxRepository, sendRequestHandler),
             onAuthorizationLost = { linkMonitor.refresh() },
         )
     }

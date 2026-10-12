@@ -6,8 +6,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [OutboxEntity::class, SenderFilterEntity::class, SeenSenderEntity::class, MessageEntity::class],
-    version = 2,
+    entities = [OutboxEntity::class, SenderFilterEntity::class, SeenSenderEntity::class, MessageEntity::class, SendRequestEntity::class],
+    version = 3,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -15,6 +15,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun senderFilterDao(): SenderFilterDao
     abstract fun seenSenderDao(): SeenSenderDao
     abstract fun messageDao(): MessageDao
+    abstract fun sendRequestDao(): SendRequestDao
 
     companion object {
         const val NAME = "relaysms.db"

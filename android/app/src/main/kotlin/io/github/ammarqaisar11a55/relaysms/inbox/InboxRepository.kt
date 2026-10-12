@@ -10,6 +10,8 @@ import io.github.ammarqaisar11a55.relaysms.core.security.FieldCipher
 import io.github.ammarqaisar11a55.relaysms.sms.IncomingSms
 import io.github.ammarqaisar11a55.relaysms.sms.SenderMatcher
 import io.github.ammarqaisar11a55.relaysms.sms.SmsAssembler
+import io.github.ammarqaisar11a55.relaysms.sms.send.SendFailure
+import io.github.ammarqaisar11a55.relaysms.sms.send.SendStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -18,6 +20,13 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import java.util.Collections
+
+/** Keeps the system SMS store in step with RelaySMS's own inbox while RelaySMS is the default SMS app. */
+interface MessageMirror {
+    suspend fun onStored()
+    suspend fun onRead(providerId: Long)
+    suspend fun onDeleted(providerIds: List<Long>)
+}
 
 /** A decrypted inbox message, held in memory only. */
 data class InboxMessage(
@@ -46,6 +55,8 @@ class InboxRepository(
     private val now: () -> Long = System::currentTimeMillis,
     /** Decides at store time whether the text looks like it carries a one-time code. */
     private val detectsOtp: (String) -> Boolean = { false },
+    /** Copies messages into the system SMS store while RelaySMS is the default SMS app. */
+    private val mirror: MessageMirror? = null,
 ) {
     private val _arrivals = MutableSharedFlow<InboxMessage>(extraBufferCapacity = 64)
 
@@ -92,20 +103,69 @@ class InboxRepository(
         if (dao.insertIfAbsent(entity) == -1L) return false
         cache[id] = sms.sender to sms.body
         _arrivals.tryEmit(toModel(entity, sms.sender, sms.body))
+        mirror?.onStored()
         return true
     }
 
-    suspend fun markRead(id: String, read: Boolean = true) = dao.setRead(id, read)
+    /**
+     * Records a message the user asked to send. It starts as pending and is shown as not sent
+     * until a result arrives.
+     */
+    suspend fun storeOutgoing(id: String, to: String, text: String, origin: String): Boolean {
+        val t = now()
+        val entity = MessageEntity(
+            id = id,
+            addressEnc = cipher.encrypt(to.toByteArray(Charsets.UTF_8), addressContext(id)),
+            bodyEnc = cipher.encrypt(text.toByteArray(Charsets.UTF_8), bodyContext(id)),
+            addressKey = addressKey(to),
+            receivedAt = t, storedAt = t,
+            direction = MessageDirection.OUTGOING, origin = origin, status = MessageStatus.PENDING,
+            isRead = true, hasOtp = false, partCount = 1, subscriptionId = -1, providerId = null, deletedAt = null,
+        )
+        if (dao.insertIfAbsent(entity) == -1L) return false
+        cache[id] = to to text
+        return true
+    }
+
+    /**
+     * Applies a send outcome. Status only moves forward: pending -> sent -> delivered, or
+     * pending -> failed. A late "sent" never replaces "delivered" or "failed".
+     * @return true if the stored status changed.
+     */
+    suspend fun applySendResult(id: String, status: String, reason: String?): Boolean {
+        val changed = when (status) {
+            SendStatus.SENT -> dao.advanceStatus(id, MessageStatus.SENT, listOf(MessageStatus.PENDING))
+            SendStatus.DELIVERED -> dao.advanceStatus(id, MessageStatus.DELIVERED, listOf(MessageStatus.PENDING, MessageStatus.SENT))
+            SendStatus.FAILED -> dao.advanceStatus(id, MessageStatus.failed(reason), listOf(MessageStatus.PENDING))
+            else -> 0
+        } > 0
+        if (changed && status != SendStatus.FAILED) mirror?.onStored()
+        return changed
+    }
+
+    /** Outgoing messages nobody answered for: they are marked as not sent rather than left "sending". */
+    suspend fun failUnansweredOutgoing(olderThanMillis: Long): Int =
+        dao.failPendingOlderThan(now() - olderThanMillis, MessageStatus.failed(SendFailure.NO_ANSWER))
+
+    /** Plaintext of a stored row, for the mirror. Null if erased or unreadable. */
+    fun reveal(entity: MessageEntity): InboxMessage? = decrypt(entity)
+
+    suspend fun markRead(id: String, read: Boolean = true) {
+        dao.setRead(id, read)
+        if (read) dao.find(id)?.providerId?.let { mirror?.onRead(it) }
+    }
 
     suspend fun markAllRead() = dao.markAllRead()
 
     /** Erases the message content. The id is remembered so the message cannot be delivered again. */
     suspend fun delete(id: String) {
+        dao.find(id)?.providerId?.let { mirror?.onDeleted(listOf(it)) }
         dao.tombstone(id, now())
         cache.remove(id)
     }
 
     suspend fun deleteAll() {
+        mirror?.onDeleted(dao.allProviderIds().mapNotNull { it.providerId })
         dao.tombstoneAll(now())
         cache.clear()
     }
@@ -120,9 +180,17 @@ class InboxRepository(
      */
     suspend fun applyRetention(retentionDays: Int): Int {
         val t = now()
-        val erased = if (retentionDays > 0) dao.tombstoneOlderThan(t - retentionDays * DAY_MS, t) else 0
+        val erased = if (retentionDays > 0) {
+            mirror?.onDeleted(dao.providerIdsOlderThan(t - retentionDays * DAY_MS).mapNotNull { it.providerId })
+            dao.tombstoneOlderThan(t - retentionDays * DAY_MS, t)
+        } else {
+            0
+        }
         dao.purgeTombstonesOlderThan(t - TOMBSTONE_DAYS * DAY_MS)
         if (erased > 0) cache.clear()
+        // Catch up on anything not yet copied to the system SMS store, e.g. after the default SMS
+        // role was granted or an earlier write was refused. A no-op when RelaySMS is not the default.
+        mirror?.onStored()
         return erased
     }
 

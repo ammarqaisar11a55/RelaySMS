@@ -16,10 +16,16 @@ import io.github.ammarqaisar11a55.relaysms.pairing.InMemoryIdentityStore
 import io.github.ammarqaisar11a55.relaysms.pairing.LinkMonitor
 import io.github.ammarqaisar11a55.relaysms.pairing.PairingActivity
 import io.github.ammarqaisar11a55.relaysms.pairing.PairingManager
-import io.github.ammarqaisar11a55.relaysms.delivery.SendResult
+import io.github.ammarqaisar11a55.relaysms.delivery.SendResult as UploadResult
 import io.github.ammarqaisar11a55.relaysms.pairing.PairingState
 import io.github.ammarqaisar11a55.relaysms.sms.EventId
 import io.github.ammarqaisar11a55.relaysms.sms.IncomingSms
+import io.github.ammarqaisar11a55.relaysms.sms.send.SendIds
+import io.github.ammarqaisar11a55.relaysms.sms.send.SendKinds
+import io.github.ammarqaisar11a55.relaysms.sms.send.SendRequest
+import io.github.ammarqaisar11a55.relaysms.sms.send.SendRequestHandler
+import io.github.ammarqaisar11a55.relaysms.sms.send.SendResult
+import io.github.ammarqaisar11a55.relaysms.sms.send.SendSettings
 import io.github.ammarqaisar11a55.relaysms.transport.EnvelopeKind
 import io.github.ammarqaisar11a55.relaysms.transport.MessageCodec
 import io.github.ammarqaisar11a55.relaysms.transport.RelayOutboxTransport
@@ -84,17 +90,51 @@ class TestPhone(
                 handlerFailuresToInject--
                 throw java.io.IOException("simulated storage failure")
             }
-            val sms = MessageCodec.decodeBody(IncomingSms.serializer(), envelope)
-            if (envelope.kind == EnvelopeKind.SMS && sms != null) received.putIfAbsent(envelope.id, sms)
+            when (envelope.kind) {
+                EnvelopeKind.SMS -> MessageCodec.decodeBody(IncomingSms.serializer(), envelope)?.let { received.putIfAbsent(envelope.id, it) }
+                SendKinds.REQUEST -> if (role == DeviceRole.SOURCE) {
+                    MessageCodec.decodeBody(SendRequest.serializer(), envelope)?.let { sendHandler.handle(envelope.id, it) }
+                }
+                SendKinds.RESULT -> if (role == DeviceRole.COMPANION) {
+                    MessageCodec.decodeBody(SendResult.serializer(), envelope)?.let { sendResults += it }
+                }
+            }
             true
         },
         onAuthorizationLost = { link.refresh() },
     )
 
+    // ---- sending SMS through the source phone ----
+
+    /** Source side: what this phone's (fake) SMS stack was asked to send, and its settings. */
+    val smsSender = FakeSmsSender()
+    val sendLog = FakeSendLog()
+    var remoteSendingEnabled = true
+    var remoteSendPerHour = 20
+    val sendHandler: SendRequestHandler by lazy {
+        SendRequestHandler(
+            object : SendSettings {
+                override suspend fun enabled() = remoteSendingEnabled
+                override suspend fun perHourLimit() = remoteSendPerHour
+            },
+            smsSender, sendLog,
+            reporter = { r -> transport.send(SendIds.resultId(r.requestId, r.status), SendKinds.RESULT, Json.encodeToString(SendResult.serializer(), r).toByteArray()) },
+        )
+    }
+
+    /** Companion side: results received for its requests, in arrival order. */
+    val sendResults = mutableListOf<SendResult>()
+
+    /** Companion side: asks the paired source to send an SMS, exactly as the app does. */
+    suspend fun requestSend(to: String, text: String, id: String = java.util.UUID.randomUUID().toString(), now: Long = System.currentTimeMillis()): Pair<String, UploadResult> {
+        val body = Json.encodeToString(SendRequest.serializer(), SendRequest(to, text, now, now + 3_600_000))
+        return id to transport.send(id, SendKinds.REQUEST, body.toByteArray())
+    }
+
     val transport = RelayOutboxTransport(store, { crypto }, apiFactory, onAuthorizationLost = { link.refresh() })
 
     /** Forwards one SMS exactly as the source app does: stable id, JSON body, seal, upload. */
-    suspend fun forward(sms: IncomingSms): SendResult =
+    suspend fun forward(sms: IncomingSms): UploadResult =
         transport.send(EventId.of(sms), EnvelopeKind.SMS, Json.encodeToString(IncomingSms.serializer(), sms).toByteArray())
 }
 

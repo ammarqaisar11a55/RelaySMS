@@ -79,7 +79,13 @@ object MessageStatus {
     const val RECEIVED = "received"
     const val PENDING = "pending"
     const val SENT = "sent"
+    const val DELIVERED = "delivered"
     const val FAILED = "failed"
+
+    /** Failed outgoing messages carry the reason code: "failed:<code>". */
+    fun failed(reason: String?): String = if (reason.isNullOrEmpty()) FAILED else "$FAILED:$reason"
+    fun isFailed(status: String): Boolean = status == FAILED || status.startsWith("$FAILED:")
+    fun failureReason(status: String): String? = status.substringAfter("$FAILED:", "").ifEmpty { null }
 }
 
 /**
@@ -115,3 +121,15 @@ data class MessageEntity(
         other.status == status && other.deletedAt == deletedAt && other.providerId == providerId
     override fun hashCode(): Int = id.hashCode()
 }
+
+/**
+ * Source phone: one row per remote send request ever received, so that a replayed request is
+ * never sent twice. Holds no recipient and no message text.
+ */
+@Entity(tableName = "send_requests", indices = [Index("received_at")])
+data class SendRequestEntity(
+    @PrimaryKey val id: String,
+    @ColumnInfo(name = "received_at") val receivedAt: Long,
+    val status: String,
+    val reason: String?,
+)

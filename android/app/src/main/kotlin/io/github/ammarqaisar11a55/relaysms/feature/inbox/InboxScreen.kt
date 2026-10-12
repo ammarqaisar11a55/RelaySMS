@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MoreVert
@@ -31,6 +32,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -64,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import io.github.ammarqaisar11a55.relaysms.core.database.MessageDirection
 import io.github.ammarqaisar11a55.relaysms.core.prefs.AppSettings
 import io.github.ammarqaisar11a55.relaysms.inbox.InboxFilter
 import io.github.ammarqaisar11a55.relaysms.inbox.InboxMessage
@@ -82,6 +85,7 @@ import kotlinx.coroutines.launch
 fun InboxScreen(
     settings: AppSettings,
     onOpenMessage: (String) -> Unit,
+    onCompose: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenPairing: () -> Unit,
     onOpenDevice: () -> Unit,
@@ -115,6 +119,11 @@ fun InboxScreen(
     RelayScaffold(
         title = "Messages",
         modifier = Modifier.testTag("companion_home"),
+        floatingActionButton = {
+            FloatingActionButton(onClick = onCompose, modifier = Modifier.testTag("inbox_compose")) {
+                Icon(Icons.Filled.Edit, contentDescription = "New message")
+            }
+        },
         actions = {
             IconButton(onClick = { searching = !searching; if (!searching) vm.setQuery("") }, modifier = Modifier.testTag("inbox_search_toggle")) {
                 Icon(if (searching) Icons.Filled.Close else Icons.Filled.Search, contentDescription = if (searching) "Close search" else "Search messages")
@@ -251,9 +260,10 @@ private fun FilterRow(state: InboxUiState.Ready, onFilter: (InboxFilter) -> Unit
 @Composable
 private fun MessageRow(m: InboxMessage, now: Long, onClick: () -> Unit) {
     val time = Times.short(m.receivedAtMillis, now)
+    val outgoing = m.direction == MessageDirection.OUTGOING
     val description = buildString {
         if (!m.isRead) append("Unread. ")
-        append("From ${m.address}. ")
+        append(if (outgoing) "To ${m.address}. ${outgoingStatusLabel(m.status, m.origin).first}. " else "From ${m.address}. ")
         if (m.hasOtp) append("Contains a code. ")
         append(m.body.take(160)).append(". ").append(time)
     }
@@ -270,7 +280,7 @@ private fun MessageRow(m: InboxMessage, now: Long, onClick: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    m.address,
+                    if (outgoing) "To: ${m.address}" else m.address,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = if (m.isRead) FontWeight.Normal else FontWeight.SemiBold,
                     maxLines = 1,
@@ -287,6 +297,13 @@ private fun MessageRow(m: InboxMessage, now: Long, onClick: () -> Unit) {
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (outgoing) {
+                val (label, tone) = outgoingStatusLabel(m.status, m.origin)
+                val (bg, fg) = toneColors(tone)
+                Surface(color = bg, contentColor = fg, shape = MaterialTheme.shapes.small, modifier = Modifier.padding(top = 6.dp)) {
+                    Text(label, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+                }
+            }
             if (m.hasOtp) {
                 val (bg, fg) = toneColors(Tone.OK)
                 Surface(color = bg, contentColor = fg, shape = MaterialTheme.shapes.small, modifier = Modifier.padding(top = 6.dp)) {

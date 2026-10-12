@@ -21,6 +21,8 @@ import io.github.ammarqaisar11a55.relaysms.background.BatteryOptimization
 import io.github.ammarqaisar11a55.relaysms.feature.pairing.formatTime
 import io.github.ammarqaisar11a55.relaysms.pairing.RotationResult
 import io.github.ammarqaisar11a55.relaysms.security.AppLock
+import io.github.ammarqaisar11a55.relaysms.sms.defaultapp.DefaultSmsRole
+import io.github.ammarqaisar11a55.relaysms.sms.send.RemoteSendPolicy
 import io.github.ammarqaisar11a55.relaysms.background.ConnectionService
 import io.github.ammarqaisar11a55.relaysms.feature.home.openAppSettings
 import io.github.ammarqaisar11a55.relaysms.ui.components.InfoCard
@@ -136,6 +138,9 @@ fun SettingsScreen(
                 }
                 FullWidthButton("Delete all messages on this phone", onClick = { confirmDeleteAll = true }, outlined = true, modifier = Modifier.testTag("delete_all_messages"))
             }
+
+            if (settings.role == DeviceRole.COMPANION) DefaultSmsSettings(paired = peer != null)
+            if (settings.role == DeviceRole.SOURCE) RemoteSendingSettings(settings, paired = peer != null)
 
             SecuritySettings(settings)
 
@@ -261,6 +266,179 @@ fun SettingsScreen(
 }
 
 @Composable
+private fun DefaultSmsSettings(paired: Boolean) {
+    val context = LocalContext.current
+    val container = LocalAppContainer.current
+    val scope = rememberCoroutineScope()
+    var available by remember { mutableStateOf(DefaultSmsRole.isAvailable(context)) }
+    var held by remember { mutableStateOf(DefaultSmsRole.isHeld(context)) }
+    var explain by rememberSaveable { mutableStateOf(false) }
+    var declined by rememberSaveable { mutableStateOf(false) }
+    // Whatever the dialog returns, the truth is what Android reports afterwards.
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        held = DefaultSmsRole.isHeld(context)
+        declined = !held
+        if (held) scope.launch { container.providerMirror.onStored() }
+    }
+    LifecycleResumeEffect(Unit) {
+        available = DefaultSmsRole.isAvailable(context)
+        held = DefaultSmsRole.isHeld(context)
+        onPauseOrDispose { }
+    }
+
+    SectionHeader("Default SMS application")
+    StatusRow(
+        "RelaySMS is the default SMS app",
+        when {
+            held -> "Yes"
+            !available -> "Not offered on this device"
+            else -> "No"
+        },
+        if (held) Tone.OK else Tone.NEUTRAL,
+        modifier = Modifier.testTag("default_sms_status"),
+    )
+    Text(
+        "RelaySMS works as your forwarded-message inbox without being the default SMS app. Making it the default is optional. If you do:\n" +
+            "• Forwarded messages are also copied into Android's SMS storage, once each, so other apps that are allowed to read SMS can see them. That storage is not encrypted by RelaySMS.\n" +
+            "• SMS that arrive on this phone's own SIM, if it has one, come to RelaySMS instead of your current SMS app.\n" +
+            "• RelaySMS does not show MMS (pictures, group messages); it only tells you one arrived.\n" +
+            "• Sending from this phone's own number needs a SIM with mobile service. Without one you can still send through the paired source phone.",
+        style = MaterialTheme.typography.bodyMedium,
+    )
+    StatusRow("Sending through the source phone", if (paired) "Available when turned on there" else "Not paired", Tone.NEUTRAL)
+    if (!held) {
+        FullWidthButton("Set as default SMS app", enabled = available, onClick = { explain = true }, modifier = Modifier.testTag("default_sms_set"))
+        if (!available) {
+            Text(
+                "Android does not offer the SMS role on this device or for this user, so RelaySMS cannot ask for it. Nothing is being bypassed; the companion inbox works regardless.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (declined) {
+            Text(
+                "RelaySMS is not the default SMS app: the request was declined or Android did not allow it. If RelaySMS was installed from a file, Android may require \"Allow restricted settings\" in App info first.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.testTag("default_sms_declined"),
+            )
+        }
+    } else {
+        Text(
+            "To switch back: open Android's default apps, choose \"SMS app\" and pick your previous app. RelaySMS keeps its own inbox; nothing is deleted when you switch.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    FullWidthButton(
+        "Open Android default apps",
+        outlined = true,
+        onClick = { runCatching { context.startActivity(DefaultSmsRole.settingsIntent()) }.onFailure { openAppSettings(context) } },
+        modifier = Modifier.testTag("default_sms_open_settings"),
+    )
+
+    if (explain) {
+        ConfirmDialog(
+            title = "Make RelaySMS the default SMS app?",
+            body = "Android will ask you to confirm. Your current SMS app stops receiving new SMS on this phone until you switch back. Forwarded messages will also be written to Android's SMS storage, which other apps with SMS access can read. You can switch back at any time; RelaySMS's inbox is kept.",
+            confirmLabel = "Continue",
+            onDismiss = { explain = false },
+            onConfirm = {
+                explain = false
+                val intent = DefaultSmsRole.requestIntent(context)
+                if (intent != null) runCatching { launcher.launch(intent) }.onFailure { declined = true }
+                else runCatching { context.startActivity(DefaultSmsRole.settingsIntent()) }
+            },
+        )
+    }
+}
+
+@Composable
+private fun RemoteSendingSettings(settings: AppSettings, paired: Boolean) {
+    val container = LocalAppContainer.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var granted by remember { mutableStateOf(container.smsSender.hasPermission()) }
+    var explain by rememberSaveable { mutableStateOf(false) }
+    var denied by rememberSaveable { mutableStateOf(false) }
+    val sentThisHour by remember { container.database.sendRequestDao().observeSentSince(System.currentTimeMillis() - 3_600_000L) }.collectAsStateWithLifecycle(0)
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        granted = ok
+        denied = !ok
+        // Turned on only when Android actually granted the permission.
+        scope.launch { container.preferences.setRemoteSendingEnabled(ok) }
+    }
+    LifecycleResumeEffect(Unit) {
+        granted = container.smsSender.hasPermission()
+        onPauseOrDispose { }
+    }
+    val active = settings.remoteSendingEnabled && granted && paired
+
+    SectionHeader("Sending from the companion")
+    SwitchRow(
+        title = "Let the companion send SMS through this phone",
+        subtitle = "Off: this phone never sends anything for the companion. On: SMS you write and confirm on the paired companion are sent from this phone's SIM and number, at this SIM's cost.",
+        checked = settings.remoteSendingEnabled && granted,
+        enabled = paired,
+        tag = "remote_sending",
+        onChange = { on ->
+            if (!on) scope.launch { container.preferences.setRemoteSendingEnabled(false) } else explain = true
+        },
+    )
+    StatusRow("Remote sending", if (active) "On" else if (!paired) "Not paired" else "Off", if (active) Tone.OK else Tone.NEUTRAL)
+    if (settings.remoteSendingEnabled && !granted) {
+        InfoCard(
+            title = "SMS sending is not permitted",
+            body = "Android has not granted RelaySMS permission to send SMS, so nothing can be sent. Allow SMS under App info → Permissions.",
+            tone = Tone.WARN,
+            action = { FullWidthButton("Open App info", onClick = { openAppSettings(context) }, outlined = true) },
+        )
+    }
+    if (denied) {
+        Text(
+            "Permission was not granted, so remote sending stays off. If no prompt appeared, allow restricted settings for RelaySMS in App info first.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+    if (settings.remoteSendingEnabled) {
+        Text("Most messages per hour", style = MaterialTheme.typography.bodyLarge)
+        Column(Modifier.selectableGroup()) {
+            for (limit in RemoteSendPolicy.PER_HOUR_CHOICES) {
+                ChoiceRow("$limit per hour", settings.remoteSendPerHour == limit, "remote_limit_$limit") {
+                    scope.launch { container.preferences.setRemoteSendPerHour(limit) }
+                }
+            }
+        }
+        StatusRow("Sent for the companion in the last hour", "$sentThisHour of ${settings.remoteSendPerHour}", Tone.NEUTRAL)
+        Text(
+            "Requests are accepted only from the paired companion, each one once, and only within an hour of being written. Revoking the companion ends this at once. " +
+                "For requests to arrive promptly while this app is closed, turn on \"Stay connected in the background\" below.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+
+    if (explain) {
+        ConfirmDialog(
+            title = "Allow sending through this phone?",
+            body = "The paired companion phone will be able to send SMS from this phone's SIM and number. Each message must be written and confirmed on the companion; RelaySMS never sends on its own. Your SIM is charged as usual. Android will now ask for permission to send SMS.",
+            confirmLabel = "Continue",
+            onDismiss = { explain = false },
+            onConfirm = {
+                explain = false
+                if (container.smsSender.hasPermission()) {
+                    granted = true
+                    scope.launch { container.preferences.setRemoteSendingEnabled(true) }
+                } else {
+                    launcher.launch(android.Manifest.permission.SEND_SMS)
+                }
+            },
+        )
+    }
+}
+
+@Composable
 private fun SecuritySettings(settings: AppSettings) {
     val container = LocalAppContainer.current
     val context = LocalContext.current
@@ -342,7 +520,7 @@ private fun BackgroundSettings(settings: AppSettings, paired: Boolean) {
     }
 
     SectionHeader("Background delivery")
-    if (settings.role == DeviceRole.COMPANION) {
+    if (settings.role == DeviceRole.COMPANION || settings.remoteSendingEnabled) {
         SwitchRow(
             title = "Stay connected in the background",
             subtitle = "On: RelaySMS stays in touch with your relay (a held connection, or a check every few seconds if the relay cannot hold one) with an ongoing notification, so messages usually arrive within seconds. " +

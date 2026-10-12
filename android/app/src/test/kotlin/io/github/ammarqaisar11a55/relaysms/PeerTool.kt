@@ -13,6 +13,7 @@ import kotlin.system.exitProcess
  *   java -cp <unit test classpath> io.github.ammarqaisar11a55.relaysms.PeerToolKt <state.json> sync
  *   ... <state.json> send <sender> <text>
  *   ... <state.json> awaiting
+ *   ... <state.json> request-send <to> <text>   (as companion: ask the app, as source, to send an SMS)
  *   ... <state.json> pair-source <file with the pairing text shown by the app>
  */
 fun main(args: Array<String>) {
@@ -24,8 +25,10 @@ fun main(args: Array<String>) {
             "sync" -> {
                 println("OUTCOME ${phone.sync.syncOnce()}")
                 for (m in phone.received.values) println("MSG ${m.sender}|${m.partCount}|${m.body}")
+                for (r in phone.sendResults) println("RESULT ${r.requestId} ${r.status} ${r.reason ?: "-"}")
             }
             "send" -> println("SEND ${phone.forward(IncomingSms(args[2], args[3], System.currentTimeMillis(), 1))}")
+            "request-send" -> companionRequest(phone, args[2], args[3]).let { println("REQUEST ${it.first} ${it.second}") }
             "awaiting" -> phone.link.refresh().let { println("AWAITING ${it.awaitingPeer} ${it.state} online=${it.peerOnline}") }
             else -> {
                 System.err.println("usage: PeerTool <state.json> sync|send <sender> <text>|awaiting")
@@ -62,3 +65,5 @@ private suspend fun pairAsSource(stateFile: File, pairingText: String): Int {
     println("PAIRED")
     return 0
 }
+
+private suspend fun companionRequest(phone: TestPhone, to: String, text: String) = phone.requestSend(to, text)

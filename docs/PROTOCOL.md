@@ -148,6 +148,26 @@ as a UUID: the same SMS always maps to the same id. Submission is idempotent on 
 receiver keeps ids it has already stored, so a replayed or re-delivered ciphertext cannot create a
 second inbox entry. The id is a one-way hash and reveals nothing about the content.
 
+### 5.5 Sending through the source phone
+
+Two further envelope kinds travel on the same encrypted, signed channel, in opposite directions:
+
+```json
+{ "v": 1, "kind": "send_request", "id": "<requestId>", "sentAt": 0,
+  "body": { "to": "+923001234567", "text": "...", "createdAtMillis": 0, "expiresAtMillis": 0 } }
+{ "v": 1, "kind": "send_result", "id": "<resultId>", "sentAt": 0,
+  "body": { "requestId": "<requestId>", "status": "sent|delivered|failed", "reason": "code or null", "atMillis": 0 } }
+```
+
+`send_request` is accepted only by a device in the source role, `send_result` only by one in the
+companion role; either kind arriving the other way round is dropped. Authority to make the source
+phone send comes from the pairing: the request is signed by the paired companion's key and
+encrypted to the source's key. The source records every request id durably before acting, so a
+replayed or re-delivered request is never sent twice, and refuses requests that are expired, older
+than one hour or dated in the future. `resultId` is a hash of the request id and status, which
+makes repeated results idempotent on the relay. Details and the full list of checks:
+[DEFAULT_SMS.md](DEFAULT_SMS.md).
+
 ## 6. Delivery semantics
 
 At-least-once transport with deduplication at both ends. The source keeps an item until the relay
