@@ -27,6 +27,9 @@ android {
     sourceSets {
         // Exported Room schemas are used by migration tests.
         getByName("androidTest").assets.srcDir("$projectDir/schemas")
+        // Simulated peer phones, shared by JVM integration tests and on-device tests.
+        getByName("test").java.srcDir("src/sharedTest/kotlin")
+        getByName("androidTest").java.srcDir("src/sharedTest/kotlin")
     }
 
     buildTypes {
@@ -51,6 +54,13 @@ android {
     }
     packaging {
         resources.excludes += setOf("META-INF/{AL2.0,LGPL2.1}", "META-INF/LICENSE*", "META-INF/NOTICE*")
+    }
+    testOptions {
+        unitTests.all {
+            // Integration tests talk to a real relay when this is set (scripts/integration-test.sh).
+            it.systemProperty("relay.test.url", System.getenv("RELAY_TEST_URL") ?: "")
+            it.maxHeapSize = "768m"
+        }
     }
     lint {
         abortOnError = true
@@ -85,12 +95,18 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.work.runtime)
     implementation(libs.tink.android)
+    implementation(libs.okhttp)
+    implementation(libs.zxing.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.okhttp.mockwebserver)
 
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

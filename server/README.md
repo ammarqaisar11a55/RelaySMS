@@ -5,16 +5,16 @@ devices and never sees plaintext. API reference: [docs/API.md](../docs/API.md).
 
 ## Layout
 
-| Path | Responsibility |
-| --- | --- |
-| `src/config` | Environment validation (fails fast, never prints values) |
-| `src/database` | Connection pool, transactions, SQL migration runner |
-| `src/security` | Token hashing, Ed25519 verification, redacting logger |
-| `src/middleware` | Authentication, rate limits, validation, error shape |
-| `src/modules/*` | `routes` (HTTP), `service` (rules), `repo` (SQL) per feature |
-| `src/realtime` | Authenticated WebSocket hub |
-| `src/jobs` | Expiry of ciphertext and pairing sessions |
-| `migrations` | Ordered `.sql` files |
+| Path             | Responsibility                                               |
+| ---------------- | ------------------------------------------------------------ |
+| `src/config`     | Environment validation (fails fast, never prints values)     |
+| `src/database`   | Connection pool, transactions, SQL migration runner          |
+| `src/security`   | Token hashing, Ed25519 verification, redacting logger        |
+| `src/middleware` | Authentication, rate limits, validation, error shape         |
+| `src/modules/*`  | `routes` (HTTP), `service` (rules), `repo` (SQL) per feature |
+| `src/realtime`   | Authenticated WebSocket hub                                  |
+| `src/jobs`       | Expiry of ciphertext and pairing sessions                    |
+| `migrations`     | Ordered `.sql` files                                         |
 
 Database access uses `pg` directly with parameterised queries and hand-written SQL migrations.
 The schema is four small tables, so an ORM would add more surface than it removes.

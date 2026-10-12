@@ -13,6 +13,7 @@ export interface PairingSession {
   companionConfirmedAt: Date | null;
   createdAt: Date;
   expiresAt: Date;
+  sourceProof: Buffer | null;
 }
 
 interface Row {
@@ -26,6 +27,7 @@ interface Row {
   companion_confirmed_at: Date | null;
   created_at: Date;
   expires_at: Date;
+  source_proof: Buffer | null;
 }
 
 const toSession = (r: Row): PairingSession => ({
@@ -39,6 +41,7 @@ const toSession = (r: Row): PairingSession => ({
   companionConfirmedAt: r.companion_confirmed_at,
   createdAt: r.created_at,
   expiresAt: r.expires_at,
+  sourceProof: r.source_proof,
 });
 
 export async function insertPairing(
@@ -84,10 +87,16 @@ export async function recordFailedAttempt(q: Queryable, id: string, cancel: bool
   );
 }
 
-export async function markRedeemed(q: Queryable, id: string, sourceId: string, now: Date): Promise<void> {
+export async function markRedeemed(
+  q: Queryable,
+  id: string,
+  sourceId: string,
+  proof: Buffer,
+  now: Date,
+): Promise<void> {
   await q.query(
-    `UPDATE pairing_sessions SET status = 'redeemed', source_id = $2, redeemed_at = $3 WHERE id = $1`,
-    [id, sourceId, now],
+    `UPDATE pairing_sessions SET status = 'redeemed', source_id = $2, redeemed_at = $3, source_proof = $4 WHERE id = $1`,
+    [id, sourceId, now, proof],
   );
 }
 

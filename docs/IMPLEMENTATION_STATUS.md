@@ -81,7 +81,37 @@ acceptance criteria need the server.
 - Known issues: rate-limit counters are in memory (single instance); Docker is not installed on
   the development host, so container files are added and documented in Module 10 but cannot be
   executed here
-- Commit message: `feat(server): add encrypted message relay`
+- Commit: `de28e19` — `feat(server): add encrypted message relay`
+- Push: SUCCESS
+
+## Module 3 — Device identity and secure pairing
+
+- Status: `COMPLETED` (emulator + JVM scope). **Not verified:** scanning the QR code with a real
+  camera — the emulator cannot present a QR code to its camera, so on-device tests use the
+  "enter pairing text" path, which feeds the same parser and protocol. To be checked on the phones.
+- Created: `docs/PROTOCOL.md` (key generation, exchange, verification, encryption, signing,
+  storage, rotation, replacement, revocation, recovery, versioning); `core/security/DeviceCrypto`
+  (Tink HPKE X25519/HKDF-SHA256/AES-256-GCM + Ed25519), `DeviceKeyStore` (Keystore-wrapped
+  keysets), `LocalCipherHolder`; `core/network/RelayApi` (OkHttp); `pairing/PairingProtocol`
+  (QR payload, HMAC proof, safety code, fingerprint), `PairingManager` (both roles),
+  `LinkMonitor` (reconciliation, revocation), `SecureIdentityStore`; pairing UI (QR display with
+  `FLAG_SECURE`, CameraX + ZXing scanner, manual entry, destination review, code comparison),
+  paired-device screen (details, status, revoke, forget locally); server migration
+  `002_pairing_proof.sql` and `pairing_cancelled` error
+- Acceptance: source pairs with intended companion; expired codes refused (server tests);
+  replayed codes refused; unpaired device cannot download messages; revocation enforced by the
+  relay; restart creates no new pairing; private keys absent from logs, QR codes and server
+  records — all met
+- Tests: Android JVM 50 (`CryptoTest`, `PairingProtocolTest`, 10 `PairingIntegrationTest` cases
+  running both roles against a real relay incl. key-substituting relay and forged QR) — PASS;
+  server 36 — PASS; on-device 17 on the Android 15 emulator (`PairingOnDeviceTest` x3 with real
+  UI and Keystore against the relay, `SecureStorageTest` x4) — PASS; `emulator-sms-check.sh` — PASS
+- Build: `:app:assembleDebug`, `:app:lintDebug`, server typecheck/lint/format/build — PASS
+- Defects found by these tests and fixed in this module: (1) after an in-app reset the app kept
+  using a handle to the deleted local key, so a pairing made before the next restart would have
+  been lost at restart; (2) HTTP response bodies were read on the calling (main) thread
+- Known issues: pairing status is polled every 2 s while the pairing screen is open
+- Commit message: `feat(security): implement device pairing`
 
 ## Modules
 
@@ -89,7 +119,7 @@ acceptance criteria need the server.
 | --- | --- | --- |
 | 1 | Android foundation and application design | COMPLETED |
 | 2 | SMS reception and sender permissions | COMPLETED |
-| 3 | Device identity and secure pairing | NOT STARTED |
+| 3 | Device identity and secure pairing | COMPLETED |
 | 4 | Node.js/TypeScript relay backend | COMPLETED |
 | 5 | End-to-end encrypted message transport | NOT STARTED |
 | 6 | Companion inbox and local storage | NOT STARTED |

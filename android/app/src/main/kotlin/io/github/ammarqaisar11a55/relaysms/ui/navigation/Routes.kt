@@ -10,6 +10,8 @@ object Routes {
     const val SOURCE_FILTERS = "source/filters"
     const val COMPANION_HOME = "companion/home"
     const val SETTINGS = "settings"
+    const val PAIRING = "pairing"
+    const val PAIRED_DEVICE = "device"
 
     /** The first screen for the stored configuration. Role-specific screens are unreachable until a role is chosen. */
     fun startDestination(settings: AppSettings): String = when (settings.role) {

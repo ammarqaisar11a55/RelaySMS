@@ -34,14 +34,18 @@ The relay never receives plaintext. `ciphertext` is opaque to it.
 | Method | Path | Who | Body | Result |
 | --- | --- | --- | --- | --- |
 | POST | `/v1/pairings` | companion | – | `201 {pairingId, secret, expiresAt}`; cancels the companion's earlier open sessions |
-| POST | `/v1/pairings/:id/redeem` | source | `{secret}` | `{pairingId, expiresAt, companion: {deviceId, role, hpkePublicKey, signingPublicKey}}` |
-| GET | `/v1/pairings/:id` | participant | – | `{pairingId, status, expiresAt, companion, source, sourceConfirmed, companionConfirmed}` |
+| POST | `/v1/pairings/:id/redeem` | source | `{secret, proof: b64url(32)}` | `{pairingId, expiresAt, companion: {deviceId, role, hpkePublicKey, signingPublicKey}}` |
+| GET | `/v1/pairings/:id` | participant | – | `{pairingId, status, expiresAt, companion, source, sourceProof, sourceConfirmed, companionConfirmed}` |
 | POST | `/v1/pairings/:id/confirm` | participant | – | `{status: "redeemed"\|"completed"}`; the link exists only once both sides confirmed |
 | POST | `/v1/pairings/:id/cancel` | participant | – | `{status: "cancelled"}` |
 
-Errors: `pairing_not_found` 404 (also returned to non-participants), `pairing_expired` 410 (expired
-or cancelled), `pairing_already_redeemed` 409, `invalid_pairing_secret` 403 (counted; the session is
+Errors: `pairing_not_found` 404 (also returned to non-participants), `pairing_expired` 410,
+`pairing_cancelled` 410 (cancelled by a participant, superseded by a newer code, or locked after
+wrong guesses), `pairing_already_redeemed` 409, `invalid_pairing_secret` 403 (counted; the session is
 cancelled after `PAIRING_MAX_FAILED_ATTEMPTS`), `pairing_not_redeemed` 409, `wrong_role` 403.
+
+`proof` is opaque to the relay: it is an HMAC keyed with a secret that exists only in the QR code,
+which lets the companion check the source's keys without trusting the relay (see `PROTOCOL.md`).
 
 Completing a pairing replaces any previous link of either device and deletes that link's queued
 ciphertext.

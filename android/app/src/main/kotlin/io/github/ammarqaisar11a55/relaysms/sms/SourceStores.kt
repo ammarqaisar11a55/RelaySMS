@@ -18,9 +18,10 @@ class SourceStores(
     private val db: AppDatabase,
     private val prefs: AppPreferences,
     private val cipher: () -> FieldCipher,
+    private val isPaired: () -> Boolean,
 ) : SourceConfigReader, FilterReader, OutboxWriter, SeenSenderRecorder, OutcomeRecorder {
 
-    override suspend fun read(): SourceConfig = prefs.current().let { SourceConfig(it.role, it.forwardingEnabled, it.allowlistOnly) }
+    override suspend fun read(): SourceConfig = prefs.current().let { SourceConfig(it.role, it.forwardingEnabled, it.allowlistOnly, isPaired()) }
 
     override suspend fun normalizedPatterns(): List<String> = db.senderFilterDao().patterns()
 

@@ -28,6 +28,38 @@ class TinkFieldCipher(private val aead: Aead) : FieldCipher {
 }
 
 /**
+ * Process-wide access to the local storage cipher. The cipher is opened on first use and can be
+ * discarded, which matters after a reset: the old keyset is deleted, and anything written
+ * afterwards must be encrypted under the new one or it would be unreadable on the next start.
+ */
+class LocalCipherHolder(private val context: Context, private val onRecreated: () -> Unit = {}) : FieldCipher {
+    @Volatile private var cached: FieldCipher? = null
+
+    private fun current(): FieldCipher {
+        cached?.let { return it }
+        synchronized(this) {
+            cached?.let { return it }
+            val opened = LocalKeys.openLocalCipher(context)
+            cached = opened.cipher
+            if (opened.recreated) onRecreated()
+            return opened.cipher
+        }
+    }
+
+    override fun encrypt(plaintext: ByteArray, context: String): ByteArray = current().encrypt(plaintext, context)
+
+    override fun decrypt(ciphertext: ByteArray, context: String): ByteArray = current().decrypt(ciphertext, context)
+
+    /** Deletes the keyset and forgets the open cipher. The next use creates a fresh key. */
+    fun destroy() {
+        synchronized(this) {
+            LocalKeys.deleteLocalKeys(context)
+            cached = null
+        }
+    }
+}
+
+/**
  * Builds the device-local AES-256-GCM keyset. The keyset is stored in a private preferences
  * file, wrapped by a key that lives in Android Keystore and never leaves it.
  */

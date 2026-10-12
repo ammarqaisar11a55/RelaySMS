@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { afterAll, describe, expect, it } from 'vitest';
 import { createHarness, pairedDevices, registerDevice, signedMessage, type Harness } from './helpers.js';
+import { PROOF } from './helpers.js';
 
 const open: Harness[] = [];
 async function harness(overrides: Parameters<typeof createHarness>[0] = {}) {
@@ -73,12 +74,12 @@ describe('error handling and privacy', () => {
     await request(h.app)
       .post(`/v1/pairings/${created.body.pairingId}/redeem`)
       .set(source.auth)
-      .send({ secret: 'B'.repeat(22) })
+      .send({ secret: 'B'.repeat(22), proof: PROOF })
       .expect(403);
     await request(h.app)
       .post(`/v1/pairings/${created.body.pairingId}/redeem`)
       .set(source.auth)
-      .send({ secret })
+      .send({ secret, proof: PROOF })
       .expect(200);
     await request(h.app)
       .post(`/v1/pairings/${created.body.pairingId}/confirm`)

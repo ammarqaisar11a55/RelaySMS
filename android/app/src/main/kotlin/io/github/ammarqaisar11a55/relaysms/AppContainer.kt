@@ -5,9 +5,16 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.preferencesDataStoreFile
 import io.github.ammarqaisar11a55.relaysms.core.common.SafeLog
 import io.github.ammarqaisar11a55.relaysms.core.database.AppDatabase
+import io.github.ammarqaisar11a55.relaysms.core.model.DeviceRole
+import io.github.ammarqaisar11a55.relaysms.core.network.RelayApi
 import io.github.ammarqaisar11a55.relaysms.core.prefs.AppPreferences
-import io.github.ammarqaisar11a55.relaysms.core.security.FieldCipher
-import io.github.ammarqaisar11a55.relaysms.core.security.LocalKeys
+import io.github.ammarqaisar11a55.relaysms.core.security.DeviceKeyStore
+import io.github.ammarqaisar11a55.relaysms.pairing.IdentityStore
+import io.github.ammarqaisar11a55.relaysms.pairing.LinkMonitor
+import io.github.ammarqaisar11a55.relaysms.pairing.PairingManager
+import io.github.ammarqaisar11a55.relaysms.pairing.SecureIdentityStore
+import okhttp3.OkHttpClient
+import io.github.ammarqaisar11a55.relaysms.core.security.LocalCipherHolder
 import io.github.ammarqaisar11a55.relaysms.delivery.DeliveryWorker
 import io.github.ammarqaisar11a55.relaysms.delivery.OutboxDeliverer
 import io.github.ammarqaisar11a55.relaysms.delivery.OutboxTransport
@@ -41,19 +48,46 @@ class AppContainer(context: Context) {
     val database: AppDatabase by lazy { AppDatabase.build(appContext) }
 
     /**
-     * Device-local storage cipher. Opened lazily because Keystore access is slow. If the keyset
-     * had to be recreated, everything encrypted under the old key is unreadable and is discarded.
+     * Device-local storage cipher, opened on first use because Keystore access is slow. If the
+     * keyset had to be recreated, everything encrypted under the old key is unreadable and is
+     * discarded.
      */
-    val localCipher: FieldCipher by lazy {
-        val opened = LocalKeys.openLocalCipher(appContext)
-        if (opened.recreated) {
-            SafeLog.event("local_key_recreated")
-            appScope.launch { discardLocallyEncryptedData() }
-        }
-        opened.cipher
+    val localCipher = LocalCipherHolder(appContext) {
+        SafeLog.event("local_key_recreated")
+        appScope.launch { discardLocallyEncryptedData() }
     }
 
-    val sourceStores: SourceStores by lazy { SourceStores(database, preferences) { localCipher } }
+    val httpClient: OkHttpClient by lazy { RelayApi.newHttpClient() }
+    val apiFactory: (String, String?) -> RelayApi = { baseUrl, token -> RelayApi(httpClient, baseUrl, token) }
+
+    /** Long-term identity keys of this device, wrapped by Android Keystore. */
+    val deviceKeys: DeviceKeyStore by lazy { DeviceKeyStore(appContext) }
+
+    val identityStore: IdentityStore by lazy { SecureIdentityStore(appContext) { localCipher } }
+
+    val linkMonitor: LinkMonitor by lazy { LinkMonitor(identityStore, apiFactory, onPeerRemoved = ::onPeerRemoved) }
+
+    fun newPairingManager(role: DeviceRole) =
+        PairingManager(role, identityStore, { deviceKeys.loadOrCreate() }, apiFactory, environment.allowCleartextLocal)
+
+    /** Bookkeeping after a pairing finished on this phone. */
+    suspend fun onPairingCompleted() {
+        identityStore.identity.value?.let { preferences.setServerUrl(it.serverUrl) }
+        linkMonitor.onPaired()
+        linkMonitor.refresh()
+    }
+
+    /**
+     * The paired device is gone (revoked here, revoked remotely, or replaced). Forwarding stops and
+     * anything still queued for the old companion is destroyed, so it can never reach a new one.
+     */
+    private suspend fun onPeerRemoved() {
+        preferences.setForwardingEnabled(false)
+        withContext(Dispatchers.IO) { database.outboxDao().deletePending() }
+        SafeLog.event("peer_removed")
+    }
+
+    val sourceStores: SourceStores by lazy { SourceStores(database, preferences, { localCipher }, { identityStore.peer.value != null }) }
 
     /** Replaced by the relay transport once pairing and networking are configured. */
     @Volatile
@@ -70,18 +104,17 @@ class AppContainer(context: Context) {
             outbox = sourceStores,
             seenSenders = sourceStores,
             outcomes = sourceStores,
-            cipher = object : FieldCipher {
-                override fun encrypt(plaintext: ByteArray, context: String) = localCipher.encrypt(plaintext, context)
-                override fun decrypt(ciphertext: ByteArray, context: String) = localCipher.decrypt(ciphertext, context)
-            },
+            cipher = localCipher,
             scheduler = deliveryScheduler,
         )
     }
 
     val resetCoordinator = ResetCoordinator().apply {
         register(ResetCoordinator.ORDER_STOP_ACTIVITY, "forwarding") { preferences.setForwardingEnabled(false) }
+        register(ResetCoordinator.ORDER_REVOKE_REMOTE, "relay registration") { linkMonitor.deleteRegistration() }
+        register(ResetCoordinator.ORDER_DELETE_KEYS, "device keys") { deviceKeys.delete() }
         register(ResetCoordinator.ORDER_WIPE_STORAGE, "database") { withContext(Dispatchers.IO) { database.clearAllTables() } }
-        register(ResetCoordinator.ORDER_WIPE_STORAGE + 1, "local keys") { LocalKeys.deleteLocalKeys(appContext) }
+        register(ResetCoordinator.ORDER_WIPE_STORAGE + 1, "local keys") { localCipher.destroy() }
         register(ResetCoordinator.ORDER_CLEAR_PREFERENCES, "preferences") { preferences.clear() }
     }
 
@@ -92,8 +125,11 @@ class AppContainer(context: Context) {
 
     /** Called once at process start: resume delivery of anything left in the queue. */
     fun onProcessStart() {
-        appScope.launch {
+        appScope.launch(Dispatchers.IO) {
+            // Touch Keystore-backed state off the main thread so the first screen does not wait for it.
+            identityStore.identity.value
             if (database.outboxDao().pendingCount() > 0) deliveryScheduler.schedule()
+            if (identityStore.identity.value != null) linkMonitor.refresh()
         }
     }
 }

@@ -36,6 +36,10 @@ interface OutboxDao {
     @Query("DELETE FROM outbox WHERE state != 'pending' AND updated_at < :cutoff")
     suspend fun deleteTombstonesOlderThan(cutoff: Long): Int
 
+    /** Drops everything still waiting, e.g. when the companion it was meant for is gone. */
+    @Query("DELETE FROM outbox WHERE state = 'pending'")
+    suspend fun deletePending(): Int
+
     @Query("DELETE FROM outbox")
     suspend fun deleteAll()
 }

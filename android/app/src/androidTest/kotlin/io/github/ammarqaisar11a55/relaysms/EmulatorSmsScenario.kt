@@ -30,6 +30,21 @@ class EmulatorSmsScenario {
         step("configure")
         container.resetCoordinator.resetEverything()
         container.preferences.setRole(DeviceRole.SOURCE)
+        // A synthetic registration (on an unreachable relay) and peer with real key material, so
+        // the source considers itself paired without needing a server for this check.
+        container.identityStore.setIdentity(
+            io.github.ammarqaisar11a55.relaysms.pairing.Identity("http://10.0.2.2:9", "00000000-0000-4000-8000-000000000002", "unused", "source", 0),
+        )
+        val peer = io.github.ammarqaisar11a55.relaysms.core.security.CryptoSetup.generateInMemory()
+        container.identityStore.setPeer(
+            io.github.ammarqaisar11a55.relaysms.pairing.Peer(
+                "00000000-0000-4000-8000-000000000001",
+                io.github.ammarqaisar11a55.relaysms.core.security.CryptoUtil.b64(peer.hpkePublicKey),
+                io.github.ammarqaisar11a55.relaysms.core.security.CryptoUtil.b64(peer.signingPublicKey),
+                System.currentTimeMillis(),
+                "000 000",
+            ),
+        )
         container.preferences.setForwardingEnabled(true)
         container.sourceStores.addFilter("TESTBANK", System.currentTimeMillis())
         Unit

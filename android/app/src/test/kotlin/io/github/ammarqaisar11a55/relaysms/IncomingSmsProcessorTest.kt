@@ -118,6 +118,13 @@ class IncomingSmsProcessorTest {
         assertEquals(listOf(SmsOutcome.MALFORMED, SmsOutcome.MALFORMED, SmsOutcome.STORAGE_ERROR), outcomes)
     }
 
+    @Test fun `nothing is retained while no companion is paired`() = runBlocking {
+        config = config.copy(paired = false)
+        assertEquals(SmsOutcome.NOT_PAIRED, processor().process(sms(), -1, 2000))
+        assertTrue(rows.isEmpty())
+        assertEquals(0, scheduled)
+    }
+
     @Test fun `companion and unconfigured installs ignore sms entirely`() = runBlocking {
         config = config.copy(role = DeviceRole.COMPANION)
         assertEquals(SmsOutcome.NOT_SOURCE, processor().process(sms(), -1, 2000))

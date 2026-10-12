@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createHarness, pair, registerDevice, signedMessage, type Harness } from './helpers.js';
+import { PROOF } from './helpers.js';
 
 let h: Harness;
 beforeAll(async () => {
@@ -34,7 +35,7 @@ describe('pairing', () => {
     const redeemed = await request(h.app)
       .post(`/v1/pairings/${pairingId}/redeem`)
       .set(source.auth)
-      .send({ secret })
+      .send({ secret, proof: PROOF })
       .expect(200);
     expect(redeemed.body.companion).toEqual({
       deviceId: companion.id,
@@ -46,6 +47,12 @@ describe('pairing', () => {
     const view = await request(h.app).get(`/v1/pairings/${pairingId}`).set(companion.auth).expect(200);
     expect(view.body.status).toBe('redeemed');
     expect(view.body.source.signingPublicKey).toBe(source.signingPublicKey);
+    expect(view.body.sourceProof).toBe(PROOF);
+    await request(h.app)
+      .post(`/v1/pairings/${pairingId}/redeem`)
+      .set(source.auth)
+      .send({ secret })
+      .expect(400);
 
     // One confirmation is not enough: no link, no message delivery.
     await request(h.app)
@@ -90,19 +97,19 @@ describe('pairing', () => {
     await request(h.app)
       .post(`/v1/pairings/${pairingId}/redeem`)
       .set(source.auth)
-      .send({ secret })
+      .send({ secret, proof: PROOF })
       .expect(200);
     const again = await request(h.app)
       .post(`/v1/pairings/${pairingId}/redeem`)
       .set(source.auth)
-      .send({ secret });
+      .send({ secret, proof: PROOF });
     expect(again.status).toBe(409);
     expect(again.body.error.code).toBe('pairing_already_redeemed');
     const intruder = await registerDevice(h.app, 'source');
     const stolen = await request(h.app)
       .post(`/v1/pairings/${pairingId}/redeem`)
       .set(intruder.auth)
-      .send({ secret });
+      .send({ secret, proof: PROOF });
     expect(stolen.status).toBe(409);
   });
 
@@ -112,7 +119,7 @@ describe('pairing', () => {
     const late = await request(h.app)
       .post(`/v1/pairings/${a.pairingId}/redeem`)
       .set(a.source.auth)
-      .send({ secret: a.secret });
+      .send({ secret: a.secret, proof: PROOF });
     expect(late.status).toBe(410);
     expect(late.body.error.code).toBe('pairing_expired');
 
@@ -120,7 +127,7 @@ describe('pairing', () => {
     await request(h.app)
       .post(`/v1/pairings/${b.pairingId}/redeem`)
       .set(b.source.auth)
-      .send({ secret: b.secret })
+      .send({ secret: b.secret, proof: PROOF })
       .expect(200);
     h.advance(121_000);
     const lateConfirm = await request(h.app)
@@ -138,15 +145,16 @@ describe('pairing', () => {
       const res = await request(h.app)
         .post(`/v1/pairings/${pairingId}/redeem`)
         .set(source.auth)
-        .send({ secret: 'A'.repeat(22) });
+        .send({ secret: 'A'.repeat(22), proof: PROOF });
       expect(res.status).toBe(403);
       expect(res.body.error.code).toBe('invalid_pairing_secret');
     }
     const locked = await request(h.app)
       .post(`/v1/pairings/${pairingId}/redeem`)
       .set(source.auth)
-      .send({ secret });
+      .send({ secret, proof: PROOF });
     expect(locked.status).toBe(410);
+    expect(locked.body.error.code).toBe('pairing_cancelled');
   });
 
   it('enforces roles and hides sessions from non-participants', async () => {
@@ -156,7 +164,7 @@ describe('pairing', () => {
     const wrongRedeem = await request(h.app)
       .post(`/v1/pairings/${pairingId}/redeem`)
       .set(companion.auth)
-      .send({ secret });
+      .send({ secret, proof: PROOF });
     expect(wrongRedeem.body.error.code).toBe('wrong_role');
 
     const outsider = await registerDevice(h.app, 'source');
@@ -173,7 +181,7 @@ describe('pairing', () => {
     await request(h.app)
       .post(`/v1/pairings/${pairingId}/redeem`)
       .set(source.auth)
-      .send({ secret })
+      .send({ secret, proof: PROOF })
       .expect(410);
     await request(h.app)
       .post(`/v1/pairings/${second.body.pairingId}/cancel`)
@@ -183,7 +191,7 @@ describe('pairing', () => {
     await request(h.app)
       .post(`/v1/pairings/${second.body.pairingId}/redeem`)
       .set(source.auth)
-      .send({ secret: second.body.secret })
+      .send({ secret: second.body.secret, proof: PROOF })
       .expect(410);
   });
 

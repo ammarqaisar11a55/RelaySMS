@@ -10,9 +10,9 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 /** What happened to one incoming SMS event. Safe to log and to count. */
-enum class SmsOutcome { NOT_SOURCE, FORWARDING_OFF, MALFORMED, FILTERED, DUPLICATE, QUEUE_FULL, STORAGE_ERROR, QUEUED }
+enum class SmsOutcome { NOT_SOURCE, NOT_PAIRED, FORWARDING_OFF, MALFORMED, FILTERED, DUPLICATE, QUEUE_FULL, STORAGE_ERROR, QUEUED }
 
-data class SourceConfig(val role: DeviceRole?, val forwardingEnabled: Boolean, val allowlistOnly: Boolean)
+data class SourceConfig(val role: DeviceRole?, val forwardingEnabled: Boolean, val allowlistOnly: Boolean, val paired: Boolean = true)
 
 /** Storage and scheduling seams, so the decision logic is testable without Android. */
 interface SourceConfigReader { suspend fun read(): SourceConfig }
@@ -66,6 +66,8 @@ class IncomingSmsProcessor(
         // Suggestions are useful while the user is still choosing filters, so senders are noted
         // even when forwarding is off. Only the sender is kept, encrypted, never the body.
         runCatching { seenSenders.record(sms.sender, nowMillis) }
+        // Without a verified companion there is nobody to encrypt for; nothing is retained.
+        if (!cfg.paired) return SmsOutcome.NOT_PAIRED
         if (!cfg.forwardingEnabled) return SmsOutcome.FORWARDING_OFF
         if (ForwardingPolicy.decide(sms.sender, cfg.allowlistOnly, filters.normalizedPatterns()) == FilterDecision.FILTERED) {
             return SmsOutcome.FILTERED

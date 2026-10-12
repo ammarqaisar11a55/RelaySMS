@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { AppContext } from '../../context.js';
 import { currentDevice, requireDevice } from '../../middleware/auth.js';
 import { ipRateLimit } from '../../middleware/rateLimit.js';
-import { parse, uuid } from '../../middleware/validate.js';
+import { base64urlBytes, parse, uuid } from '../../middleware/validate.js';
 import {
   cancelPairing,
   confirmPairing,
@@ -20,6 +20,7 @@ const redeemBody = z
       .min(16)
       .max(64)
       .regex(/^[A-Za-z0-9_-]+$/),
+    proof: base64urlBytes(32),
   })
   .strict();
 
@@ -34,8 +35,8 @@ export function pairingRouter(ctx: AppContext): Router {
 
   router.post('/pairings/:id/redeem', limit, auth, async (req, res) => {
     const { id } = parse(idParams, req.params);
-    const { secret } = parse(redeemBody, req.body);
-    res.json(await redeemPairing(ctx, currentDevice(res), id, secret));
+    const { secret, proof } = parse(redeemBody, req.body);
+    res.json(await redeemPairing(ctx, currentDevice(res), id, secret, proof));
   });
 
   router.get('/pairings/:id', auth, async (req, res) => {

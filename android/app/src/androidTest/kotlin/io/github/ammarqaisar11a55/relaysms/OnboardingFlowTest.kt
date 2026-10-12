@@ -53,7 +53,8 @@ class OnboardingFlowTest {
         rule.onNodeWithTag("role_source").performScrollTo().performClick()
         rule.onNodeWithTag("role_confirm").performScrollTo().performClick()
         waitForTag("source_home")
-        rule.onNodeWithTag("sms_permission_request").assertIsDisplayed()
+        // The permission card depends on device state; the pairing prompt is always present here.
+        rule.onNodeWithTag("open_pairing").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("open_filters").performScrollTo().performClick()
         rule.onNodeWithTag("filter_input").performTextInput("TESTBANK")
         rule.onNodeWithTag("filter_add").performClick()

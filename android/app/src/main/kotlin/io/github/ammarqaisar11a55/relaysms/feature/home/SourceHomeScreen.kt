@@ -48,6 +48,8 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.ammarqaisar11a55.relaysms.core.prefs.AppSettings
 import io.github.ammarqaisar11a55.relaysms.core.prefs.ForwardingStats
+import io.github.ammarqaisar11a55.relaysms.feature.pairing.label
+import io.github.ammarqaisar11a55.relaysms.pairing.LinkState
 import io.github.ammarqaisar11a55.relaysms.ui.components.FullWidthButton
 import io.github.ammarqaisar11a55.relaysms.ui.components.InfoCard
 import io.github.ammarqaisar11a55.relaysms.ui.components.RelayScaffold
@@ -70,7 +72,13 @@ fun openAppSettings(context: Context) {
 }
 
 @Composable
-fun SourceHomeScreen(settings: AppSettings, onOpenSettings: () -> Unit, onOpenFilters: () -> Unit) {
+fun SourceHomeScreen(
+    settings: AppSettings,
+    onOpenSettings: () -> Unit,
+    onOpenFilters: () -> Unit,
+    onOpenPairing: () -> Unit,
+    onOpenDevice: () -> Unit,
+) {
     val container = LocalAppContainer.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -78,9 +86,13 @@ fun SourceHomeScreen(settings: AppSettings, onOpenSettings: () -> Unit, onOpenFi
     var smsGranted by remember { mutableStateOf(hasPermission(context, Manifest.permission.RECEIVE_SMS)) }
     var showRationale by rememberSaveable { mutableStateOf(false) }
     var denied by rememberSaveable { mutableStateOf(false) }
+    val peer by container.identityStore.peer.collectAsStateWithLifecycle()
+    val link by container.linkMonitor.status.collectAsStateWithLifecycle()
+    val paired = peer != null
     LifecycleResumeEffect(Unit) {
         smsGranted = hasPermission(context, Manifest.permission.RECEIVE_SMS)
-        onPauseOrDispose { }
+        val job = container.appScope.launch { container.linkMonitor.refresh() }
+        onPauseOrDispose { job.cancel() }
     }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         smsGranted = granted
@@ -92,7 +104,8 @@ fun SourceHomeScreen(settings: AppSettings, onOpenSettings: () -> Unit, onOpenFi
     val filters by container.sourceStores.filters.collectAsStateWithLifecycle(emptyList())
 
     // Forwarding can only be effective with the permission; never show it as active without it.
-    val forwardingActive = settings.forwardingEnabled && smsGranted
+    val canForward = smsGranted && paired
+    val forwardingActive = settings.forwardingEnabled && canForward
 
     RelayScaffold(
         title = "RelaySMS · Source",
@@ -129,12 +142,23 @@ fun SourceHomeScreen(settings: AppSettings, onOpenSettings: () -> Unit, onOpenFi
                 )
             }
 
+            if (!paired) {
+                InfoCard(
+                    icon = Icons.Filled.Sms,
+                    title = if (link.state == LinkState.REVOKED) "Pairing was removed" else "Pair a companion phone",
+                    body = if (link.state == LinkState.REVOKED) "The companion phone is no longer paired. Forwarding was turned off and unsent messages were discarded. Pair again to continue."
+                    else "Messages are encrypted for one specific companion phone. Pair it before turning forwarding on.",
+                    tone = if (link.state == LinkState.REVOKED) Tone.ERROR else Tone.NEUTRAL,
+                    action = { FullWidthButton("Pair with companion phone", onClick = onOpenPairing, modifier = Modifier.testTag("open_pairing")) },
+                )
+            }
+
             SectionHeader("Forwarding")
             Row(
                 Modifier.fillMaxWidth().heightIn(min = 56.dp)
                     .toggleable(
                         value = settings.forwardingEnabled,
-                        enabled = smsGranted,
+                        enabled = canForward,
                         role = Role.Switch,
                         onValueChange = { on -> scope.launch { container.preferences.setForwardingEnabled(on) } },
                     )
@@ -147,6 +171,7 @@ fun SourceHomeScreen(settings: AppSettings, onOpenSettings: () -> Unit, onOpenFi
                     Text(
                         when {
                             !smsGranted -> "Allow SMS access first"
+                            !paired -> "Pair a companion phone first"
                             settings.forwardingEnabled -> "On. Tap to pause forwarding."
                             else -> "Off. Nothing is forwarded."
                         },
@@ -154,7 +179,7 @@ fun SourceHomeScreen(settings: AppSettings, onOpenSettings: () -> Unit, onOpenFi
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Switch(checked = settings.forwardingEnabled, onCheckedChange = null, enabled = smsGranted)
+                Switch(checked = settings.forwardingEnabled && paired, onCheckedChange = null, enabled = canForward)
             }
             if (forwardingActive && settings.allowlistOnly && filters.isEmpty()) {
                 InfoCard(
@@ -177,16 +202,17 @@ fun SourceHomeScreen(settings: AppSettings, onOpenSettings: () -> Unit, onOpenFi
                 "Forwarding",
                 when {
                     forwardingActive -> "On"
-                    settings.forwardingEnabled -> "Blocked: no permission"
+                    settings.forwardingEnabled && !smsGranted -> "Blocked: no permission"
                     else -> "Off"
                 },
                 if (forwardingActive) Tone.OK else Tone.NEUTRAL,
             )
-            StatusRow("Companion phone", "Not paired", Tone.WARN)
+            link.label().let { (label, tone) -> StatusRow("Companion phone", label, tone) }
+            if (paired) FullWidthButton("Paired device", onClick = onOpenDevice, outlined = true, modifier = Modifier.testTag("open_device"))
             StatusRow("Waiting to be sent", pending.toString(), if (pending == 0) Tone.NEUTRAL else Tone.WARN)
             if (pending > 0) {
                 Text(
-                    "Messages are kept encrypted on this phone until a companion phone is paired. Unsent messages are discarded after 72 hours.",
+                    "Messages wait encrypted on this phone until they can be sent. Unsent messages are discarded after 72 hours.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

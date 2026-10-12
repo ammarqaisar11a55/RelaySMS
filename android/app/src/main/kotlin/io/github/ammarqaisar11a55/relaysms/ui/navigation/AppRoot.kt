@@ -20,6 +20,8 @@ import io.github.ammarqaisar11a55.relaysms.feature.filters.SenderFiltersScreen
 import io.github.ammarqaisar11a55.relaysms.feature.home.CompanionHomeScreen
 import io.github.ammarqaisar11a55.relaysms.feature.home.SourceHomeScreen
 import io.github.ammarqaisar11a55.relaysms.feature.onboarding.RoleSelectionScreen
+import io.github.ammarqaisar11a55.relaysms.feature.pairing.PairedDeviceScreen
+import io.github.ammarqaisar11a55.relaysms.feature.pairing.PairingScreen
 import io.github.ammarqaisar11a55.relaysms.feature.onboarding.WelcomeScreen
 import io.github.ammarqaisar11a55.relaysms.feature.settings.SettingsScreen
 import io.github.ammarqaisar11a55.relaysms.ui.components.LoadingState
@@ -54,10 +56,24 @@ private fun AppNavHost(settings: AppSettings) {
         composable(Routes.WELCOME) { WelcomeScreen(onContinue = { nav.navigate(Routes.ROLE) }) }
         composable(Routes.ROLE) { RoleSelectionScreen(onBack = back) }
         composable(Routes.SOURCE_HOME) {
-            SourceHomeScreen(settings, onOpenSettings = { nav.navigate(Routes.SETTINGS) }, onOpenFilters = { nav.navigate(Routes.SOURCE_FILTERS) })
+            SourceHomeScreen(
+                settings,
+                onOpenSettings = { nav.navigate(Routes.SETTINGS) },
+                onOpenFilters = { nav.navigate(Routes.SOURCE_FILTERS) },
+                onOpenPairing = { nav.navigate(Routes.PAIRING) },
+                onOpenDevice = { nav.navigate(Routes.PAIRED_DEVICE) },
+            )
         }
         composable(Routes.SOURCE_FILTERS) { SenderFiltersScreen(settings, onBack = back) }
-        composable(Routes.COMPANION_HOME) { CompanionHomeScreen(onOpenSettings = { nav.navigate(Routes.SETTINGS) }) }
+        composable(Routes.COMPANION_HOME) {
+            CompanionHomeScreen(
+                onOpenSettings = { nav.navigate(Routes.SETTINGS) },
+                onOpenPairing = { nav.navigate(Routes.PAIRING) },
+                onOpenDevice = { nav.navigate(Routes.PAIRED_DEVICE) },
+            )
+        }
+        composable(Routes.PAIRING) { PairingScreen(settings, onBack = back, onDone = back) }
+        composable(Routes.PAIRED_DEVICE) { PairedDeviceScreen(settings, onBack = back, onPair = { nav.navigate(Routes.PAIRING) }) }
         composable(Routes.SETTINGS) { SettingsScreen(settings = settings, onBack = back) }
     }
 }

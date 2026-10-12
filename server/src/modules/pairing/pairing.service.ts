@@ -20,6 +20,7 @@ import {
 } from './pairing.repo.js';
 
 const expired = () => errors.gone('pairing_expired', 'This pairing code has expired. Create a new one.');
+const cancelled = () => errors.gone('pairing_cancelled', 'This pairing was cancelled. Create a new code.');
 const notFound = () => errors.notFound('pairing_not_found', 'Pairing session not found.');
 
 /** Step 1 (companion): open a short-lived, single-use session. The secret is returned once. */
@@ -49,7 +50,13 @@ export async function createPairing(ctx: AppContext, companion: Device) {
  * session. Wrong secrets are counted and the session is cancelled after too many of them, so the
  * secret cannot be guessed online.
  */
-export async function redeemPairing(ctx: AppContext, source: Device, pairingId: string, secret: string) {
+export async function redeemPairing(
+  ctx: AppContext,
+  source: Device,
+  pairingId: string,
+  secret: string,
+  proof: Buffer,
+) {
   if (source.role !== 'source') {
     throw errors.forbidden('wrong_role', 'Only a source device can redeem a pairing code.');
   }
@@ -58,7 +65,8 @@ export async function redeemPairing(ctx: AppContext, source: Device, pairingId: 
   const outcome = await withTransaction(ctx.db, async (tx): Promise<ApiError | PairingSession> => {
     const session = await lockPairing(tx, pairingId);
     if (!session) return notFound();
-    if (session.status === 'cancelled' || session.status === 'expired') return expired();
+    if (session.status === 'cancelled') return cancelled();
+    if (session.status === 'expired') return expired();
     if (session.expiresAt.getTime() <= ctx.now().getTime()) {
       await setPairingStatus(tx, session.id, 'expired');
       return expired();
@@ -71,8 +79,8 @@ export async function redeemPairing(ctx: AppContext, source: Device, pairingId: 
       await recordFailedAttempt(tx, session.id, cancel);
       return errors.forbidden('invalid_pairing_secret', 'The pairing code is not valid.');
     }
-    await markRedeemed(tx, session.id, source.id, ctx.now());
-    return { ...session, status: 'redeemed', sourceId: source.id };
+    await markRedeemed(tx, session.id, source.id, proof, ctx.now());
+    return { ...session, status: 'redeemed', sourceId: source.id, sourceProof: proof };
   });
   if (outcome instanceof ApiError) throw outcome;
   const companion = await findDevice(ctx.db, outcome.companionId);
@@ -103,6 +111,8 @@ export async function getPairing(ctx: AppContext, device: Device, pairingId: str
     expiresAt: session.expiresAt.toISOString(),
     companion: companion ? toPublicDevice(companion) : null,
     source: source ? toPublicDevice(source) : null,
+    /** Opaque to the relay; the companion verifies it with the secret from its own QR code. */
+    sourceProof: session.sourceProof ? session.sourceProof.toString('base64url') : null,
     sourceConfirmed: session.sourceConfirmedAt !== null,
     companionConfirmed: session.companionConfirmedAt !== null,
   };
@@ -121,7 +131,8 @@ export async function confirmPairing(ctx: AppContext, device: Device, pairingId:
       if (!session) return notFound();
       const side = assertParticipant(session, device);
       if (session.status === 'completed') return { completed: true, peers: [] };
-      if (session.status === 'cancelled' || session.status === 'expired') return expired();
+      if (session.status === 'cancelled') return cancelled();
+      if (session.status === 'expired') return expired();
       if (session.expiresAt.getTime() <= ctx.now().getTime()) {
         await setPairingStatus(tx, session.id, 'expired');
         return expired();

@@ -15,6 +15,9 @@ import { messageSigningInput } from '../src/security/signatures.js';
 export const TEST_DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? 'postgres://relaysms@127.0.0.1:54329/relaysms_test';
 
+/** A syntactically valid pairing proof. The relay treats it as opaque bytes. */
+export const PROOF = randomBytes(32).toString('base64url');
+
 export interface Harness {
   app: Express;
   ctx: AppContext;
@@ -120,7 +123,11 @@ export async function pairedDevices(
 export async function pair(app: Express, source: TestDevice, companion: TestDevice): Promise<string> {
   const created = await request(app).post('/v1/pairings').set(companion.auth).send();
   const { pairingId, secret } = created.body as { pairingId: string; secret: string };
-  await request(app).post(`/v1/pairings/${pairingId}/redeem`).set(source.auth).send({ secret }).expect(200);
+  await request(app)
+    .post(`/v1/pairings/${pairingId}/redeem`)
+    .set(source.auth)
+    .send({ secret, proof: PROOF })
+    .expect(200);
   await request(app).post(`/v1/pairings/${pairingId}/confirm`).set(source.auth).send().expect(200);
   await request(app).post(`/v1/pairings/${pairingId}/confirm`).set(companion.auth).send().expect(200);
   return pairingId;
