@@ -128,6 +128,8 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "RelaySMS-$NAME.apk" "RelaySMS-$NAME.apk.sha256" --clobber
           else
+            # Versions below 1.0.0 are marked as pre-releases: builds for trying out on real phones.
+            PRE=""; case "$NAME" in 0.*) PRE="--prerelease" ;; esac
             gh release create "$TAG" "RelaySMS-$NAME.apk" "RelaySMS-$NAME.apk.sha256" \
-              --title "RelaySMS $NAME" --notes-file notes.md --generate-notes --target "$GITHUB_SHA"
+              --title "RelaySMS $NAME" --notes-file notes.md --generate-notes --target "$GITHUB_SHA" $PRE
           fi
