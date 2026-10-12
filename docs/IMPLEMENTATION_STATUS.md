@@ -384,9 +384,9 @@ acceptance criteria need the server.
 
 ## Additional requirement — Vercel deployment on a shared PostgreSQL database
 
-- Status: `IN PROGRESS` — code, tests and Vercel project are done; **the deployment is not live**
-  until `DATABASE_URL` and `CRON_SECRET` are added to the Vercel project (left to the owner,
-  because they are secrets) and a deployment is triggered
+- Status: `COMPLETED` — deployed and verified live on 2026-10-13 (see "Open items" below for
+  what was checked). `DATABASE_URL` was added by the owner; `CRON_SECRET` was generated on the
+  development machine and stored without being displayed
 - Created: `server/src/vercel.ts` + `server/api/index.js` + `server/vercel.json` (serverless
   entry, migrations in the build step, daily clean-up cron), `GET /v1/info`,
   `/internal/cron/expire`, poll mode (`REALTIME=poll`) with activity-based presence,
@@ -479,8 +479,8 @@ acceptance criteria need the server.
 
 | Item | State | What is needed |
 | --- | --- | --- |
-| Relay on Vercel | **Not working.** Project `relaysms` exists and is connected to the repository, but all three deployments failed in the build's database step with `DATABASE_URL: Required`; the project has no environment variables | Add `DATABASE_URL` and `CRON_SECRET` to the Vercel project (they are secrets and were not entered by the assistant), then redeploy. See `VERCEL.md` §3 |
-| Supabase database | Untouched. Nothing has been created in it yet | Nothing; the first successful deployment creates the `relaysms` schema |
+| Relay on Vercel | **Working** at `https://relaysms-theta.vercel.app` since 2026-10-13. Checked live: `/healthz` and `/readyz` 200, `/v1/info` reports poll mode, unauthenticated requests get 401, `scripts/relay-smoke.mjs` passed all 8 steps (register, pair, signed upload, duplicate, delivery, acknowledgement, device deletion). The build applied migrations 001–005. `/metrics` (aggregate counts only) is publicly reachable on Vercel; the scheduled clean-up has not run yet | Nothing. The team-scoped `…-projects.vercel.app` addresses are behind Vercel's login; phones must use the `relaysms-theta.vercel.app` address |
+| Supabase database | Schema `relaysms` created with 5 tables, row level security on all of them. `public` still has 14 tables and `pwma` 17, as before; `public.devices` is unchanged | Nothing |
 | GitHub release | **Not published.** Tag `v0.9.0` was pushed; the Release workflow run stopped at "Check that signing secrets exist" | Run `scripts/create-release-keystore.sh`, add the four `ANDROID_*` repository secrets, then re-run the failed workflow run. See `INSTALL.md` §6 |
 | Real-device validation | **Not performed.** No phone was attached at any point | Work through `TESTING.md` §4 on the source phone and the Galaxy S25 Ultra |
 
