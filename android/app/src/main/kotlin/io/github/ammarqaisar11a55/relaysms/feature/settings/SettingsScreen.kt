@@ -345,7 +345,7 @@ private fun BackgroundSettings(settings: AppSettings, paired: Boolean) {
     if (settings.role == DeviceRole.COMPANION) {
         SwitchRow(
             title = "Stay connected in the background",
-            subtitle = "On: RelaySMS keeps a connection to your relay with an ongoing notification, so messages usually arrive within seconds. " +
+            subtitle = "On: RelaySMS stays in touch with your relay (a held connection, or a check every few seconds if the relay cannot hold one) with an ongoing notification, so messages usually arrive within seconds. " +
                 "Off: when the app is closed, messages arrive at Android's next background sync, which can take 15 minutes or longer.",
             checked = settings.backgroundConnection,
             enabled = paired,

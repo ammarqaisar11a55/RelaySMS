@@ -25,7 +25,9 @@ in the phone's normal SMS app; RelaySMS never deletes or modifies them.
 | Link between two devices | Revoked by either phone, replaced by a new pairing, or either device is deleted |
 | Pairing session | One day after it expires |
 
-The relay never holds plaintext, sender addresses or codes.
+The relay never holds plaintext, sender addresses or codes. Its tables (`relay_devices`,
+`relay_links`, `relay_messages`, `relay_pairing_sessions`) live in their own schema (`relaysms` by
+default), so the database can be shared with other applications.
 
 ## On the companion phone
 

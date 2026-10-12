@@ -41,9 +41,9 @@ export async function createHarness(overrides: Partial<Record<keyof Config, stri
     RATE_LIMIT_PAIRING_MAX: '10000',
     ...overrides,
   });
-  const db = createPool(config.DATABASE_URL);
-  await migrate(db);
-  await db.query('TRUNCATE messages, links, pairing_sessions, devices CASCADE');
+  const db = createPool(config.DATABASE_URL, { schema: config.DATABASE_SCHEMA });
+  await migrate(db, config.DATABASE_SCHEMA);
+  await db.query('TRUNCATE relay_messages, relay_links, relay_pairing_sessions, relay_devices CASCADE');
 
   const chunks: string[] = [];
   const logger = pino(

@@ -10,6 +10,30 @@ const schema = z.object({
     .string()
     .min(1)
     .refine((v) => /^postgres(ql)?:\/\//.test(v), 'must be a postgres:// connection string'),
+  /**
+   * PostgreSQL schema that holds every RelaySMS table. The relay never reads or writes outside
+   * it, so the database can be shared with other applications.
+   */
+  DATABASE_SCHEMA: z
+    .string()
+    .regex(/^[a-z_][a-z0-9_]{0,62}$/, 'must be a lower-case identifier')
+    .refine((v) => !['public', 'pg_catalog', 'information_schema'].includes(v), 'must be a dedicated schema')
+    .default('relaysms'),
+  /** Optional PEM certificate authority for verifying the database server (sslmode=verify-full). */
+  DATABASE_CA_CERT: z.string().default(''),
+  /** Connections per process. Keep this small on serverless platforms. */
+  DB_POOL_MAX: int(10, 1, 100),
+  /**
+   * How devices learn about new messages. "websocket": a held connection (needs a long-running
+   * server). "poll": devices ask every POLL_INTERVAL_SECONDS (serverless platforms).
+   */
+  REALTIME: z.enum(['websocket', 'poll']).default('websocket'),
+  POLL_INTERVAL_SECONDS: int(10, 3, 600),
+  /** Bearer secret that authorises the scheduled clean-up endpoint. Empty disables the endpoint. */
+  CRON_SECRET: z
+    .string()
+    .default('')
+    .refine((v) => v === '' || v.length >= 16, 'must be at least 16 characters when set'),
   /** Number of reverse proxies in front of the server, used to find the real client IP. */
   TRUST_PROXY: int(0, 0, 10),
   /** Optional shared code a device must present to register. Empty disables the check. */

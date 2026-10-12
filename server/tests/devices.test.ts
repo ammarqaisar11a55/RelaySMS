@@ -32,7 +32,7 @@ describe('device registration and authentication', () => {
   it('registers a device and stores only a hash of its token', async () => {
     const d = await registerDevice(h.app, 'companion');
     expect(d.token.startsWith(`${d.id}.`)).toBe(true);
-    const row = await h.db.query('SELECT token_hash, role FROM devices WHERE id = $1', [d.id]);
+    const row = await h.db.query('SELECT token_hash, role FROM relay_devices WHERE id = $1', [d.id]);
     const stored = row.rows[0].token_hash as Buffer;
     expect(stored.length).toBe(32);
     expect(d.token).not.toContain(stored.toString('base64url'));
@@ -97,7 +97,7 @@ describe('device registration and authentication', () => {
     await request(h.app).get('/v1/devices/me').set(fresh).expect(200);
     await request(h.app).get('/v1/devices/me').set(d.auth).expect(401);
     await request(h.app).get('/v1/devices/me').set(fresh).expect(200);
-    const row = await h.db.query('SELECT previous_token_hash FROM devices WHERE id = $1', [d.id]);
+    const row = await h.db.query('SELECT previous_token_hash FROM relay_devices WHERE id = $1', [d.id]);
     expect(row.rows[0].previous_token_hash).toBeNull();
   });
 
@@ -159,7 +159,7 @@ describe('revocation', () => {
     expect(upload.body.error.code).toBe('not_linked');
     const pending = await request(h.app).get('/v1/messages/pending').set(companion.auth).expect(200);
     expect(pending.body.messages).toEqual([]);
-    const left = await h.db.query('SELECT COUNT(*) AS n FROM messages WHERE recipient_id = $1', [
+    const left = await h.db.query('SELECT COUNT(*) AS n FROM relay_messages WHERE recipient_id = $1', [
       companion.id,
     ]);
     expect(Number(left.rows[0].n)).toBe(0);

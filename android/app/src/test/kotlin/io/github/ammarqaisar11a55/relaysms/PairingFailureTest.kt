@@ -16,7 +16,10 @@ import io.github.ammarqaisar11a55.relaysms.pairing.Peer
 import io.github.ammarqaisar11a55.relaysms.pairing.QrPayload
 import io.github.ammarqaisar11a55.relaysms.transport.EnvelopeKind
 import io.github.ammarqaisar11a55.relaysms.transport.RelayOutboxTransport
+import io.github.ammarqaisar11a55.relaysms.transport.RelaySocket
 import io.github.ammarqaisar11a55.relaysms.transport.RelaySync
+import io.github.ammarqaisar11a55.relaysms.transport.SocketState
+import kotlinx.coroutines.flow.first
 import io.github.ammarqaisar11a55.relaysms.transport.SyncOutcome
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.MockResponse
@@ -181,6 +184,38 @@ class PairingFailureTest {
         // A relay that claims "more" for ever cannot trap the device in a loop.
         repeat(60) { server.enqueue(json(200, """{"messages":[{"messageId":"55555555-5555-4555-8555-555555555555","senderId":"x","ciphertext":"AAAA","signature":"AAAA","createdAt":"x"}],"more":true}""")); server.enqueue(json(200, """{"acknowledged":1}""")) }
         assertEquals(SyncOutcome.RETRY, sync.syncOnce())
+    }
+
+    @Test fun `a relay that cannot hold a connection is polled instead`() = runBlocking {
+        pairedStore()
+        server.enqueue(json(200, """{"apiVersion":1,"realtime":"poll","pollIntervalSeconds":3}"""))
+        val events = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val polls = java.util.concurrent.atomic.AtomicInteger()
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
+        val socket = RelaySocket(
+            client, store, scope, onEvent = { events += it }, onRejected = {},
+            relayInfo = { base -> (RelayApi(client, base, null).info() as? ApiResult.Ok)?.value },
+            // The third poll fails, as when the relay becomes unreachable.
+            poll = { polls.incrementAndGet() < 3 },
+        )
+        try {
+            socket.start()
+            kotlinx.coroutines.withTimeout(10_000) { socket.state.first { it == SocketState.POLLING } }
+            assertEquals("/v1/info", server.takeRequest().path)
+            assertEquals(listOf(RelaySocket.EVENT_CONNECTED), events.toList())
+            // "Network is back" wakes the loop instead of waiting out the interval.
+            socket.reconnectNow()
+            kotlinx.coroutines.withTimeout(5_000) { while (polls.get() < 1) kotlinx.coroutines.delay(20) }
+            socket.reconnectNow(); kotlinx.coroutines.delay(100); socket.reconnectNow()
+            kotlinx.coroutines.withTimeout(10_000) { socket.state.first { it == SocketState.WAITING_TO_RETRY } }
+            assertEquals(3, polls.get())
+            // No WebSocket handshake was ever attempted against this relay.
+            assertEquals(1, server.requestCount)
+        } finally {
+            socket.stop()
+            scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+        }
+        assertEquals(SocketState.STOPPED, socket.state.value)
     }
 
     @Test fun `api client maps transport and protocol failures`() = runBlocking {

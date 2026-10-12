@@ -167,6 +167,7 @@ class TransportIntegrationTest {
 
     @Test fun `the live channel connects with the device credential and delivers a content-free hint`(): Unit = runBlocking {
         val source = TestPhone(DeviceRole.SOURCE); val companion = TestPhone(DeviceRole.COMPANION)
+        org.junit.Assume.assumeTrue("relay runs in poll mode", (RelayApi(source.client, relayTestUrl, null).info() as ApiResult.Ok).value.realtime == "websocket")
         pair(source, companion)
         val events = java.util.concurrent.CopyOnWriteArrayList<String>()
         val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
@@ -190,6 +191,32 @@ class TransportIntegrationTest {
             withTimeout(15_000) { while (source.link.refresh().peerOnline) kotlinx.coroutines.delay(100) }
             socket.start()
             withTimeout(15_000) { socket.state.first { it == SocketState.CONNECTED } }
+        } finally {
+            socket.stop()
+            scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+        }
+    }
+
+    @Test fun `against a serverless relay messages arrive by polling and presence follows activity`(): Unit = runBlocking {
+        val info = (RelayApi(RelayApi.newHttpClient(), relayTestUrl, null).info() as ApiResult.Ok).value
+        org.junit.Assume.assumeTrue("relay runs in websocket mode", info.realtime == "poll")
+        val source = TestPhone(DeviceRole.SOURCE); val companion = TestPhone(DeviceRole.COMPANION)
+        pair(source, companion)
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
+        val socket = RelaySocket(
+            companion.client, companion.store, scope, onEvent = {}, onRejected = {},
+            relayInfo = { base -> (RelayApi(companion.client, base, null).info() as? ApiResult.Ok)?.value },
+            poll = { companion.sync.syncOnce() != SyncOutcome.RETRY },
+        )
+        try {
+            socket.start()
+            withTimeout(15_000) { socket.state.first { it == SocketState.POLLING } }
+            source.forward(sms)
+            // No hint exists in this mode: the message arrives at the next poll by itself.
+            withTimeout(info.pollIntervalSeconds * 3000L + 5000) { while (companion.received.isEmpty()) kotlinx.coroutines.delay(100) }
+            assertEquals(listOf(sms), companion.received.values.toList())
+            assertTrue("a polling device counts as online", source.link.refresh().peerOnline)
+            assertEquals(0, source.link.refresh().awaitingPeer)
         } finally {
             socket.stop()
             scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()

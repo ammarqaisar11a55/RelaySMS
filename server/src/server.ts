@@ -21,10 +21,14 @@ async function main(): Promise<void> {
     process.exit(78);
   }
   const logger = createLogger(config.LOG_LEVEL);
-  const db = createPool(config.DATABASE_URL);
+  const db = createPool(config.DATABASE_URL, {
+    schema: config.DATABASE_SCHEMA,
+    max: config.DB_POOL_MAX,
+    caCert: config.DATABASE_CA_CERT,
+  });
   db.on('error', (err) => logger.error({ err: { name: err.name } }, 'database pool error'));
 
-  const applied = await migrate(db);
+  const applied = await migrate(db, config.DATABASE_SCHEMA);
   if (applied.length) logger.info({ applied }, 'migrations applied');
 
   const hub = new Hub();

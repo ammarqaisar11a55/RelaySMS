@@ -25,7 +25,9 @@ async function open() {
 describe('pairing', () => {
   it('links two devices only after redeem and both confirmations', async () => {
     const { companion, source, pairingId, secret } = await open();
-    const stored = await h.db.query('SELECT secret_hash FROM pairing_sessions WHERE id = $1', [pairingId]);
+    const stored = await h.db.query('SELECT secret_hash FROM relay_pairing_sessions WHERE id = $1', [
+      pairingId,
+    ]);
     expect((stored.rows[0].secret_hash as Buffer).toString('utf8')).not.toContain(secret);
 
     // Confirming before the source has scanned is refused.

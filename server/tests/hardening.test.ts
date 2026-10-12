@@ -200,7 +200,7 @@ describe('hostile input', () => {
 
     // Nothing above reached the tables.
     const counts = await h.db.query(
-      'SELECT (SELECT COUNT(*) FROM messages) AS m, (SELECT COUNT(*) FROM devices) AS d',
+      'SELECT (SELECT COUNT(*) FROM relay_messages) AS m, (SELECT COUNT(*) FROM relay_devices) AS d',
     );
     expect(counts.rows[0]).toEqual({ m: '0', d: '2' });
   });
@@ -213,7 +213,7 @@ describe('revoked devices', () => {
     await request(h.app).delete('/v1/devices/me').set(companion.auth).expect(204);
 
     const ids = async () =>
-      (await h.db.query('SELECT id FROM devices ORDER BY id')).rows.map((r) => r.id as string);
+      (await h.db.query('SELECT id FROM relay_devices ORDER BY id')).rows.map((r) => r.id as string);
     await runExpiry(h.ctx, h.metrics);
     expect(await ids()).toEqual([source.id, companion.id].sort());
     await request(h.app).get('/v1/devices/me').set(companion.auth).expect(401);

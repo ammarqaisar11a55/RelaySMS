@@ -10,7 +10,7 @@ import java.text.DateFormat
 import java.util.Calendar
 import java.util.Date
 
-enum class ConnectionKind { NOT_PAIRED, REVOKED, NO_NETWORK, SYNCING, CONNECTED, RECENTLY_SYNCED, CONNECTING, OFFLINE }
+enum class ConnectionKind { NOT_PAIRED, REVOKED, NO_NETWORK, SYNCING, CONNECTED, CHECKING_REGULARLY, RECENTLY_SYNCED, CONNECTING, OFFLINE }
 
 data class ConnectionSummary(val kind: ConnectionKind, val label: String, val detail: String, val tone: Tone)
 
@@ -32,6 +32,9 @@ object ConnectionSummaries {
             !online -> ConnectionSummary(ConnectionKind.NO_NETWORK, "No internet connection", "$lastSync · messages will arrive when this phone is back online", Tone.WARN)
             sync.running -> ConnectionSummary(ConnectionKind.SYNCING, "Synchronizing…", lastSync, Tone.NEUTRAL)
             socket == SocketState.CONNECTED -> ConnectionSummary(ConnectionKind.CONNECTED, "Connected", lastSync, Tone.OK)
+            // Poll mode: there is no open connection, so the wording says what really happens.
+            socket == SocketState.POLLING && sync.lastOutcome == SyncOutcome.COMPLETE ->
+                ConnectionSummary(ConnectionKind.CHECKING_REGULARLY, "Checking for messages", "$lastSync · this relay is asked every few seconds", Tone.OK)
             sync.lastOutcome == SyncOutcome.COMPLETE && nowMillis - sync.lastCompleteAtMillis < RECENT_MS ->
                 ConnectionSummary(ConnectionKind.RECENTLY_SYNCED, "Synced", lastSync, Tone.OK)
             socket == SocketState.CONNECTING -> ConnectionSummary(ConnectionKind.CONNECTING, "Connecting…", lastSync, Tone.NEUTRAL)

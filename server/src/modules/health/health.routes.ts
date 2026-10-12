@@ -34,9 +34,9 @@ export function healthRouter(ctx: AppContext, metrics: Metrics): Router {
   const metricsLimit = ipRateLimit(ctx.config.RATE_LIMIT_WINDOW_SECONDS, ctx.config.RATE_LIMIT_MAX);
   router.get('/metrics', metricsLimit, async (_req, res) => {
     const q = await ctx.db.query<{ devices: string; links: string; pending: string }>(
-      `SELECT (SELECT COUNT(*) FROM devices WHERE revoked_at IS NULL) AS devices,
-              (SELECT COUNT(*) FROM links) AS links,
-              (SELECT COUNT(*) FROM messages WHERE acked_at IS NULL) AS pending`,
+      `SELECT (SELECT COUNT(*) FROM relay_devices WHERE revoked_at IS NULL) AS devices,
+              (SELECT COUNT(*) FROM relay_links) AS links,
+              (SELECT COUNT(*) FROM relay_messages WHERE acked_at IS NULL) AS pending`,
     );
     const row = q.rows[0];
     res.json({

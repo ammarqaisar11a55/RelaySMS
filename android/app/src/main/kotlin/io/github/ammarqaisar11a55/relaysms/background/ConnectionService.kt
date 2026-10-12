@@ -88,8 +88,20 @@ class ConnectionService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_relay)
-            .setContentTitle(if (state == SocketState.CONNECTED) "Connected to your relay" else "Waiting for the relay connection")
-            .setContentText(if (state == SocketState.CONNECTED) "Ready to receive messages" else "Will reconnect automatically")
+            .setContentTitle(
+                when (state) {
+                    SocketState.CONNECTED -> "Connected to your relay"
+                    SocketState.POLLING -> "Checking your relay for messages"
+                    else -> "Waiting for the relay connection"
+                },
+            )
+            .setContentText(
+                when (state) {
+                    SocketState.CONNECTED -> "Ready to receive messages"
+                    SocketState.POLLING -> "Asks every few seconds"
+                    else -> "Will reconnect automatically"
+                },
+            )
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setShowWhen(false)

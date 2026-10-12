@@ -57,7 +57,7 @@ describe('message relay', () => {
       .send({ messageIds: [first.messageId, randomUUID()] })
       .expect(200, { acknowledged: 0 });
 
-    const row = await h.db.query('SELECT ciphertext, acked_at FROM messages WHERE message_id = $1', [
+    const row = await h.db.query('SELECT ciphertext, acked_at FROM relay_messages WHERE message_id = $1', [
       first.messageId,
     ]);
     expect(row.rows[0].ciphertext).toBeNull();
@@ -216,7 +216,9 @@ describe('message relay', () => {
     expect(pending.body.messages).toEqual([]);
     const removed = await runExpiry(h.ctx, h.metrics);
     expect(removed.messages).toBeGreaterThanOrEqual(1);
-    const left = await h.db.query('SELECT COUNT(*) AS n FROM messages WHERE message_id = $1', [m.messageId]);
+    const left = await h.db.query('SELECT COUNT(*) AS n FROM relay_messages WHERE message_id = $1', [
+      m.messageId,
+    ]);
     expect(Number(left.rows[0].n)).toBe(0);
     expect(h.metrics.expiredMessages).toBeGreaterThanOrEqual(1);
   });

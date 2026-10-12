@@ -71,13 +71,21 @@ export async function describeDevice(ctx: AppContext, device: Device) {
             ...toPublicDevice(peer),
             linkedAt: link.createdAt.toISOString(),
             lastSeenAt: peer.lastSeenAt.toISOString(),
-            online: ctx.hub.isOnline(peer.id),
+            // With a held connection presence is exact. When devices poll instead, a device
+            // counts as online while its last request is recent.
+            online:
+              ctx.hub.isOnline(peer.id) ||
+              (ctx.config.REALTIME === 'poll' &&
+                ctx.now().getTime() - peer.lastSeenAt.getTime() < PRESENCE_WINDOW_MS),
             /** Messages this device sent that the peer has not acknowledged yet. */
             awaitingPeer: await countPendingFrom(ctx.db, device.id, peer.id, ctx.now()),
           }
         : null,
   };
 }
+
+/** In poll mode a device is shown as online this long after its last request. */
+const PRESENCE_WINDOW_MS = 150_000;
 
 /** How long the previous credential keeps working if the new one is never used. */
 export const TOKEN_ROTATION_GRACE_MS = 24 * 3_600_000;

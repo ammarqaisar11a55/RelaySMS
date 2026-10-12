@@ -79,6 +79,9 @@ class InboxQueryTest {
         assertEquals(ConnectionKind.OFFLINE, kind(LinkState.PAIRED, true, SocketState.STOPPED, old))
         assertEquals(ConnectionKind.OFFLINE, kind(LinkState.PAIRED, true, SocketState.STOPPED, recent.copy(lastOutcome = SyncOutcome.RETRY)))
         assertEquals(ConnectionKind.SYNCING, kind(LinkState.PAIRED, true, SocketState.STOPPED, SyncStatus(running = true)))
+        // Poll mode is described as regular checking, never as "Connected".
+        assertEquals(ConnectionKind.CHECKING_REGULARLY, kind(LinkState.PAIRED, true, SocketState.POLLING, recent))
+        assertEquals(ConnectionKind.OFFLINE, kind(LinkState.PAIRED, true, SocketState.POLLING, SyncStatus(lastOutcome = SyncOutcome.RETRY)))
         // No internet on the phone outranks everything except "not paired".
         fun offline(link: LinkState, paired: Boolean, socket: SocketState) = ConnectionSummaries.of(LinkStatus(link), paired, socket, recent, now, online = false).kind
         assertEquals(ConnectionKind.NO_NETWORK, offline(LinkState.PAIRED, true, SocketState.CONNECTED))

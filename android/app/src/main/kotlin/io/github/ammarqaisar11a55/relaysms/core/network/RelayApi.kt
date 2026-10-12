@@ -40,6 +40,8 @@ sealed interface ApiResult<out T> {
     val awaitingPeer: Int = 0,
 )
 @Serializable data class MeResponse(val deviceId: String, val role: String, val serverTime: String = "", val peer: PeerInfo? = null)
+/** Public facts about a relay. Older relays have no such endpoint and are treated as WebSocket relays. */
+@Serializable data class RelayInfo(val apiVersion: Int = 1, val realtime: String = "websocket", val pollIntervalSeconds: Int = 10)
 @Serializable data class TokenResponse(val token: String)
 @Serializable data class RevokeResponse(val revoked: Boolean)
 @Serializable data class CreatePairingResponse(val pairingId: String, val secret: String, val expiresAt: String)
@@ -69,6 +71,7 @@ class RelayApi(private val client: OkHttpClient, baseUrl: String, private val to
     private val base = baseUrl.trimEnd('/') + "/v1"
 
     suspend fun register(body: RegisterRequest) = post("/devices", RegisterRequest.serializer(), body, RegisterResponse.serializer(), auth = false)
+    suspend fun info() = get("/info", RelayInfo.serializer())
     suspend fun me() = get("/devices/me", MeResponse.serializer())
     suspend fun rotateToken() = postEmpty("/devices/me/token", TokenResponse.serializer())
     suspend fun deleteDevice(): ApiResult<Unit> = execute<Unit>(request("/devices/me").delete().build(), null)

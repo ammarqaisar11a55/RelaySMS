@@ -22,6 +22,16 @@ The relay never receives plaintext. `ciphertext` is opaque to it.
 `/healthz` and `/readyz` are exempt from rate limits. Every response of the relay carries
 `Cache-Control: no-store`.
 
+## Relay information (no authentication)
+
+| Method | Path | Result |
+| --- | --- | --- |
+| GET | `/v1/info` | `{apiVersion, realtime: "websocket"\|"poll", pollIntervalSeconds}` — how clients learn about new messages on this relay |
+| GET | `/internal/cron/expire` | Only when `CRON_SECRET` is set, with `Authorization: Bearer <CRON_SECRET>`: removes expired data, returns counts. `404` otherwise |
+
+In poll mode there is no `/v1/ws`; clients call `GET /v1/messages/pending` every
+`pollIntervalSeconds`, and `peer.online` means "made a request in the last 2.5 minutes".
+
 ## Devices
 
 | Method | Path | Auth | Body | Result |

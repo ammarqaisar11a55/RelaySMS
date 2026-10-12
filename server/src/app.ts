@@ -6,6 +6,7 @@ import { ipRateLimit } from './middleware/rateLimit.js';
 import { devicesRouter } from './modules/devices/devices.routes.js';
 import { healthRouter, type Metrics } from './modules/health/health.routes.js';
 import { messagesRouter } from './modules/messages/messages.routes.js';
+import { cronRouter, infoRouter } from './modules/system/system.routes.js';
 import { pairingRouter } from './modules/pairing/pairing.routes.js';
 
 export const API_PREFIX = '/v1';
@@ -42,10 +43,12 @@ export function createApp(ctx: AppContext, metrics: Metrics): Express {
   });
 
   app.use(healthRouter(ctx, metrics));
+  app.use(cronRouter(ctx, metrics));
   app.use(ipRateLimit(ctx.config.RATE_LIMIT_WINDOW_SECONDS, ctx.config.RATE_LIMIT_MAX));
   // base64url inflates the ciphertext by 4/3; leave room for the JSON envelope.
   app.use(express.json({ limit: Math.ceil(ctx.config.MAX_CIPHERTEXT_BYTES * 1.4) + 2048, strict: true }));
 
+  app.use(API_PREFIX, infoRouter(ctx));
   app.use(API_PREFIX, devicesRouter(ctx));
   app.use(API_PREFIX, pairingRouter(ctx));
   app.use(API_PREFIX, messagesRouter(ctx));

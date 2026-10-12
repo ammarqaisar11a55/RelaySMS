@@ -6,8 +6,12 @@ import { createPool } from './pool.js';
 const logger = createLogger('info');
 try {
   const config = loadConfig();
-  const db = createPool(config.DATABASE_URL);
-  const applied = await migrate(db);
+  const db = createPool(config.DATABASE_URL, {
+    schema: config.DATABASE_SCHEMA,
+    max: 1,
+    caCert: config.DATABASE_CA_CERT,
+  });
+  const applied = await migrate(db, config.DATABASE_SCHEMA);
   logger.info({ applied }, applied.length ? 'migrations applied' : 'database already up to date');
   await db.end();
 } catch (err) {

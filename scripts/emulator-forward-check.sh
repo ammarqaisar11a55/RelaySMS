@@ -37,9 +37,9 @@ exec "$ROOT/scripts/with-relay.sh" bash -c '
   grep -q "^OK (1 test)" "$OUT" || { echo "FAIL: forwarding test"; exit 1; }
 
   echo "checking the relay database for plaintext"
-  LEAKS=$(psql "$RELAY_TEST_DATABASE_URL" -qAt -c "SELECT COUNT(*) FROM messages WHERE ciphertext IS NOT NULL AND (position(convert_to('"'"'Synthetic'"'"', '"'"'UTF8'"'"') in ciphertext) > 0 OR position(convert_to('"'"'TESTBANK'"'"', '"'"'UTF8'"'"') in ciphertext) > 0)")
-  ROWS=$(psql "$RELAY_TEST_DATABASE_URL" -qAt -c "SELECT COUNT(*) FROM messages")
-  HELD=$(psql "$RELAY_TEST_DATABASE_URL" -qAt -c "SELECT COUNT(*) FROM messages WHERE ciphertext IS NOT NULL")
+  LEAKS=$(psql "$RELAY_TEST_DATABASE_URL" -qAt -c "SELECT COUNT(*) FROM relaysms.relay_messages WHERE ciphertext IS NOT NULL AND (position(convert_to('"'"'Synthetic'"'"', '"'"'UTF8'"'"') in ciphertext) > 0 OR position(convert_to('"'"'TESTBANK'"'"', '"'"'UTF8'"'"') in ciphertext) > 0)")
+  ROWS=$(psql "$RELAY_TEST_DATABASE_URL" -qAt -c "SELECT COUNT(*) FROM relaysms.relay_messages")
+  HELD=$(psql "$RELAY_TEST_DATABASE_URL" -qAt -c "SELECT COUNT(*) FROM relaysms.relay_messages WHERE ciphertext IS NOT NULL")
   # Acknowledged rows no longer hold ciphertext at all; any that still do must be opaque.
   echo "relay rows: $ROWS (still holding ciphertext: $HELD), rows containing plaintext: $LEAKS"
   [ "$LEAKS" = "0" ] && [ "$ROWS" -ge 2 ] || { echo "FAIL: relay database check"; exit 1; }

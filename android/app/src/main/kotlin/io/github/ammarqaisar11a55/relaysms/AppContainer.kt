@@ -8,7 +8,10 @@ import io.github.ammarqaisar11a55.relaysms.background.NetworkMonitor
 import io.github.ammarqaisar11a55.relaysms.core.common.SafeLog
 import io.github.ammarqaisar11a55.relaysms.core.database.AppDatabase
 import io.github.ammarqaisar11a55.relaysms.core.model.DeviceRole
+import io.github.ammarqaisar11a55.relaysms.core.network.ApiResult
 import io.github.ammarqaisar11a55.relaysms.core.network.RelayApi
+import io.github.ammarqaisar11a55.relaysms.core.network.RelayInfo
+import io.github.ammarqaisar11a55.relaysms.transport.SyncOutcome
 import io.github.ammarqaisar11a55.relaysms.core.prefs.AppPreferences
 import io.github.ammarqaisar11a55.relaysms.core.security.DeviceKeyStore
 import io.github.ammarqaisar11a55.relaysms.pairing.CredentialRotator
@@ -140,7 +143,29 @@ class AppContainer(context: Context) {
 
     /** Live hint channel. Connected only while the app is in the foreground. */
     val relaySocket: RelaySocket by lazy {
-        RelaySocket(httpClient, identityStore, appScope, onEvent = ::onRelayEvent, onRejected = { linkMonitor.refresh() })
+        RelaySocket(
+            httpClient, identityStore, appScope,
+            onEvent = ::onRelayEvent,
+            onRejected = { linkMonitor.refresh() },
+            relayInfo = { baseUrl ->
+                when (val r = apiFactory(baseUrl, null).info()) {
+                    is ApiResult.Ok -> r.value
+                    // A relay without this endpoint predates poll mode: it speaks WebSocket.
+                    is ApiResult.Error -> if (r.status == 404) RelayInfo() else null
+                    ApiResult.Unreachable -> null
+                }
+            },
+            poll = ::pollRelay,
+        )
+    }
+
+    private var pollTicks = 0
+
+    /** One round in poll mode. The link is re-checked every few rounds, not every time. */
+    private suspend fun pollRelay(): Boolean {
+        val outcome = relaySync.syncOnce()
+        if (++pollTicks % 6 == 0) linkMonitor.refresh()
+        return outcome != SyncOutcome.RETRY
     }
 
     private suspend fun onRelayEvent(type: String) {

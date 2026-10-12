@@ -1,5 +1,6 @@
 package io.github.ammarqaisar11a55.relaysms.transport
 
+import io.github.ammarqaisar11a55.relaysms.core.network.RelayInfo
 import io.github.ammarqaisar11a55.relaysms.core.network.ServerUrl
 import io.github.ammarqaisar11a55.relaysms.pairing.IdentityStore
 import kotlinx.coroutines.CompletableDeferred
@@ -23,7 +24,17 @@ import okhttp3.WebSocketListener
 import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 
-enum class SocketState { STOPPED, CONNECTING, CONNECTED, WAITING_TO_RETRY }
+enum class SocketState {
+    STOPPED,
+    CONNECTING,
+
+    /** An authenticated WebSocket is open. */
+    CONNECTED,
+
+    /** The relay cannot hold a connection open (serverless); the app asks it at short intervals. */
+    POLLING,
+    WAITING_TO_RETRY,
+}
 
 /** Exponential backoff with jitter, used for reconnecting. */
 class Backoff(private val baseMs: Long = 1_000, private val maxMs: Long = 60_000, private val random: Random = Random.Default) {
@@ -53,6 +64,10 @@ class RelaySocket(
     private val scope: CoroutineScope,
     private val onEvent: suspend (type: String) -> Unit,
     private val onRejected: suspend () -> Unit,
+    /** Asks the relay how it notifies clients. Null means it could not be reached. */
+    private val relayInfo: suspend (baseUrl: String) -> RelayInfo? = { RelayInfo() },
+    /** One poll: fetch whatever is waiting. Returns false when the relay could not be reached. */
+    private val poll: suspend () -> Boolean = { true },
 ) {
     private val client = httpClient.newBuilder().pingInterval(25, TimeUnit.SECONDS).callTimeout(0, TimeUnit.MILLISECONDS).readTimeout(0, TimeUnit.MILLISECONDS).build()
     private val _state = MutableStateFlow(SocketState.STOPPED)
@@ -83,6 +98,21 @@ class RelaySocket(
         while (scope.isActive) {
             val identity = store.identity.first { it != null }!!
             _state.value = SocketState.CONNECTING
+            val info = relayInfo(identity.serverUrl)
+            if (info == null) {
+                _state.value = SocketState.WAITING_TO_RETRY
+                wake.tryReceive()
+                withTimeoutOrNull(backoff.next()) { wake.receive() }
+                continue
+            }
+            if (info.realtime == "poll") {
+                backoff.reset()
+                pollLoop(identity.deviceId, info.pollIntervalSeconds.coerceIn(MIN_POLL_SECONDS, MAX_POLL_SECONDS) * 1000L)
+                _state.value = SocketState.WAITING_TO_RETRY
+                wake.tryReceive()
+                withTimeoutOrNull(backoff.next()) { wake.receive() }
+                continue
+            }
             val closed = CompletableDeferred<Int>()
             val request = Request.Builder()
                 .url(ServerUrl.toWebSocketUrl(identity.serverUrl, "/v1/ws"))
@@ -125,6 +155,17 @@ class RelaySocket(
         }
     }
 
+    /** Runs until the relay stops answering or the registration changes. */
+    private suspend fun pollLoop(deviceId: String, intervalMs: Long) {
+        _state.value = SocketState.POLLING
+        onEvent(EVENT_CONNECTED)
+        while (scope.isActive && store.identity.value?.deviceId == deviceId) {
+            // A wake-up (network back, user pulled to refresh) polls at once.
+            withTimeoutOrNull(intervalMs) { wake.receive() }
+            if (!poll()) return
+        }
+    }
+
     @Serializable private data class Event(val type: String)
 
     companion object {
@@ -133,6 +174,8 @@ class RelaySocket(
         const val EVENT_LINK = "link_changed"
         const val EVENT_DELIVERY = "delivery_updated"
         private const val CLOSE_REVOKED = 4401
+        private const val MIN_POLL_SECONDS = 3
+        private const val MAX_POLL_SECONDS = 600
         private val JSON = Json { ignoreUnknownKeys = true }
     }
 }

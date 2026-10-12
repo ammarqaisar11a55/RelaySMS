@@ -54,13 +54,13 @@ describe('error handling and privacy', () => {
   it('answers 500 without detail and keeps serving when the database fails', async () => {
     const h = await harness();
     const d = await registerDevice(h.app, 'source');
-    await h.db.query('ALTER TABLE links RENAME TO links_broken');
+    await h.db.query('ALTER TABLE relay_links RENAME TO relay_links_broken');
     try {
       const res = await request(h.app).get('/v1/devices/me').set(d.auth);
       expect(res.status).toBe(500);
       expect(res.body).toEqual({ error: { code: 'internal_error', message: 'Something went wrong.' } });
     } finally {
-      await h.db.query('ALTER TABLE links_broken RENAME TO links');
+      await h.db.query('ALTER TABLE relay_links_broken RENAME TO relay_links');
     }
     await request(h.app).get('/v1/devices/me').set(d.auth).expect(200);
   });
@@ -124,7 +124,7 @@ describe('error handling and privacy', () => {
       .send(signedMessage(source, companion.id))
       .expect(201);
     const columns = await h.db.query(
-      `SELECT column_name FROM information_schema.columns WHERE table_name = 'messages' ORDER BY column_name`,
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'relay_messages' AND table_schema = current_schema() ORDER BY column_name`,
     );
     expect(columns.rows.map((r) => r.column_name as string)).toEqual([
       'acked_at',

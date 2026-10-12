@@ -4,7 +4,8 @@
 #
 #   scripts/with-relay.sh <command> [args...]
 #
-# Environment: RELAY_TEST_PORT (default 18080), PAIRING_TTL_SECONDS, MESSAGE_TTL_HOURS.
+# Environment: RELAY_TEST_PORT (default 18080), PAIRING_TTL_SECONDS, MESSAGE_TTL_HOURS,
+# RELAY_REALTIME (websocket|poll, default websocket), RELAY_POLL_SECONDS.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PORT="${RELAY_TEST_PORT:-18080}"
@@ -25,6 +26,7 @@ LOG="$(mktemp)"
   DATABASE_URL="${DB_URL%/relaysms}/relaysms_it" HOST=127.0.0.1 PORT="$PORT" LOG_LEVEL="${RELAY_LOG_LEVEL:-warn}" \
     RATE_LIMIT_MAX=100000 RATE_LIMIT_REGISTRATION_MAX=10000 RATE_LIMIT_PAIRING_MAX=10000 \
     PAIRING_TTL_SECONDS="${PAIRING_TTL_SECONDS:-300}" MESSAGE_TTL_HOURS="${MESSAGE_TTL_HOURS:-72}" \
+    REALTIME="${RELAY_REALTIME:-websocket}" POLL_INTERVAL_SECONDS="${RELAY_POLL_SECONDS:-3}" \
     exec node dist/server.js
 ) >"$LOG" 2>&1 &
 SERVER_PID=$!

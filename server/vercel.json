@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm ci --no-audit --no-fund",
+  "buildCommand": "npm run build && npm run migrate",
+  "outputDirectory": "public",
+  "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }],
+  "functions": {
+    "api/index.js": { "maxDuration": 15, "memory": 512 }
+  },
+  "crons": [{ "path": "/internal/cron/expire", "schedule": "0 3 * * *" }]
+}
