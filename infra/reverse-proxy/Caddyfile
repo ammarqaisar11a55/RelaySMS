@@ -1,0 +1,26 @@
+# TLS-terminating reverse proxy for the RelaySMS relay.
+#
+# RELAY_DOMAIN must be a public DNS name that points at this host, with ports 80 and 443
+# reachable from the internet. Caddy then obtains and renews a certificate automatically and
+# redirects HTTP to HTTPS. The phones use normal certificate validation, so a self-signed or
+# private-CA certificate will not work with a release build of the app.
+#
+# No access log is configured on purpose: request paths contain pairing ids and the log would
+# record client addresses. The relay keeps its own content-free application log.
+
+{$RELAY_DOMAIN} {
+	# Aggregate counters only, but there is no reason to publish them. Read them from the host:
+	#   docker compose ... exec relay node -e "fetch('http://127.0.0.1:8080/metrics').then(r=>r.text()).then(console.log)"
+	@private path /metrics
+	respond @private 404
+
+	# The relay enforces its own limit (MAX_CIPHERTEXT_BYTES). This is an outer bound; raise it
+	# if you raise MAX_CIPHERTEXT_BYTES above the default.
+	request_body {
+		max_size 256KB
+	}
+
+	# WebSocket upgrades on /v1/ws are passed through by reverse_proxy without extra settings.
+	# Caddy replaces any client-supplied X-Forwarded-For, so the relay runs with TRUST_PROXY=1.
+	reverse_proxy relay:8080
+}

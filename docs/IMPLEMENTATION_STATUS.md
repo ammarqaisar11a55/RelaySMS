@@ -172,6 +172,36 @@ acceptance criteria need the server.
   bounded by retention but is not designed for hundreds of thousands of messages
 - Commit message: `feat(inbox): implement companion message storage`
 
+## Module 10 — Backend deployment and configuration
+
+- Status: `COMPLETED` for what can be verified without Docker. **Not verified:** the container
+  files were never built or run — Docker is not installed on the development host — and no
+  deployment was made. `docs/DEPLOYMENT.md` §9 lists exactly what was and was not executed.
+- Created: `server/Dockerfile` (multi-stage, production dependencies only, `USER node`,
+  `HEALTHCHECK`), `server/.dockerignore`, `server/src/healthcheck.ts`, `infra/compose.yaml`
+  (PostgreSQL 17 with a named volume on an internal network, relay with read-only file system and
+  dropped capabilities, Caddy; log rotation 5 x 10 MB per container; stop grace periods),
+  `infra/reverse-proxy/Caddyfile` (automatic TLS, WebSocket pass-through, `/metrics` not
+  published, body-size bound, no access log), `scripts/relay-smoke.mjs` (round-trip check of a
+  running relay), `docs/DEPLOYMENT.md` (deploy, verify, operate, upgrade, roll back, backup and
+  restore, configuration reference, observable metadata, running without Docker);
+  `.env.example` extended with `RELAY_DOMAIN` and `POSTGRES_PASSWORD`
+- Acceptance: start with documented commands, apply migrations, check health, verify message
+  delivery — met for the non-Docker path (commands in `DEPLOYMENT.md` §10 and the Dockerfile's
+  steps reproduced by hand in clean directories); **not demonstrated for `docker compose up`**.
+  Configuration errors reported clearly without printing credentials — met, tested at process
+  level
+- Tests: server 42 (`npm test`, adds `startup.test.ts` x6: exit 78 naming only the bad
+  variables, no password printed when the database is unreachable, clean SIGTERM exit, health
+  probe up / down / database down) — PASS; `scripts/relay-smoke.mjs` against a relay started from
+  an image-layout directory with production dependencies only — 8/8 steps PASS, and correctly
+  refused without the registration code; `pg_dump -Fc` / `pg_restore --clean --if-exists
+  --no-owner` round trip on PostgreSQL 18.6 — PASS; `compose.yaml` parsed as YAML
+- Build: `npm run typecheck`, `lint`, `format:check`, `build` — PASS
+- Known issues: Dockerfile, Compose file and Caddyfile are unexecuted (see above); the Caddyfile
+  could not be checked with `caddy validate`; PostgreSQL 17 (the Compose image) was not run here
+- Commit message: `feat(deploy): add self-hosted relay deployment`
+
 ## Modules
 
 | # | Module | Status |
@@ -185,7 +215,7 @@ acceptance criteria need the server.
 | 7 | OTP detection, copying and notifications | NOT STARTED |
 | 8 | Persistent connectivity and background reliability | NOT STARTED |
 | 9 | Security hardening | NOT STARTED |
-| 10 | Backend deployment and configuration | NOT STARTED |
+| 10 | Backend deployment and configuration | COMPLETED (container files not executed: no Docker on dev host) |
 | 11 | Automated testing and end-to-end validation | NOT STARTED |
 | 12 | UX polish and accessibility | NOT STARTED |
 | 13 | Release builds and private installation | NOT STARTED |

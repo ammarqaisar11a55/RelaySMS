@@ -1,0 +1,109 @@
+# Self-hosted RelaySMS relay: PostgreSQL + relay + Caddy (TLS).
+#
+# Run from the repository root, with a filled-in .env next to .env.example:
+#   docker compose --env-file .env -f infra/compose.yaml up -d --build
+#
+# See docs/DEPLOYMENT.md. Only ports 80 and 443 are published; the database and the relay's
+# own port are reachable only inside the Compose networks.
+
+name: relaysms
+
+x-logging: &logging
+  # Log rotation: at most 5 files of 10 MB per container.
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: relaysms
+      POSTGRES_DB: relaysms
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U relaysms -d relaysms"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    stop_grace_period: 60s
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
+  relay:
+    build:
+      context: ../server
+    image: relaysms-relay:local
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "8080"
+      # POSTGRES_PASSWORD must be URL-safe (letters and digits), see .env.example.
+      DATABASE_URL: postgres://relaysms:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/relaysms
+      TRUST_PROXY: "1"
+      REGISTRATION_CODE: ${REGISTRATION_CODE:-}
+      PAIRING_TTL_SECONDS: ${PAIRING_TTL_SECONDS:-300}
+      PAIRING_MAX_FAILED_ATTEMPTS: ${PAIRING_MAX_FAILED_ATTEMPTS:-5}
+      MESSAGE_TTL_HOURS: ${MESSAGE_TTL_HOURS:-72}
+      MAX_CIPHERTEXT_BYTES: ${MAX_CIPHERTEXT_BYTES:-131072}
+      MAX_PENDING_PER_DEVICE: ${MAX_PENDING_PER_DEVICE:-500}
+      RATE_LIMIT_WINDOW_SECONDS: ${RATE_LIMIT_WINDOW_SECONDS:-60}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-300}
+      RATE_LIMIT_REGISTRATION_MAX: ${RATE_LIMIT_REGISTRATION_MAX:-10}
+      RATE_LIMIT_PAIRING_MAX: ${RATE_LIMIT_PAIRING_MAX:-20}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    networks: [backend, edge]
+    # The image defines the health check (GET /readyz) and runs as the unprivileged "node" user.
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    init: true
+    # The relay drains for up to 10 seconds after SIGTERM before it forces an exit.
+    stop_grace_period: 20s
+    logging: *logging
+
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      relay:
+        condition: service_healthy
+    environment:
+      RELAY_DOMAIN: ${RELAY_DOMAIN:?Set RELAY_DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./reverse-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [edge]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
+networks:
+  # No route to the outside: only the relay can reach the database.
+  backend:
+    internal: true
+  edge:
+
+volumes:
+  # PostgreSQL data. Survives "docker compose down"; removed only by "down --volumes".
+  db-data:
+  # Certificates and ACME account. Keep it, or Caddy has to request new certificates.
+  caddy-data:
+  caddy-config:

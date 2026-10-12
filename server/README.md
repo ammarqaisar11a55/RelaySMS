@@ -5,16 +5,18 @@ devices and never sees plaintext. API reference: [docs/API.md](../docs/API.md).
 
 ## Layout
 
-| Path             | Responsibility                                               |
-| ---------------- | ------------------------------------------------------------ |
-| `src/config`     | Environment validation (fails fast, never prints values)     |
-| `src/database`   | Connection pool, transactions, SQL migration runner          |
-| `src/security`   | Token hashing, Ed25519 verification, redacting logger        |
-| `src/middleware` | Authentication, rate limits, validation, error shape         |
-| `src/modules/*`  | `routes` (HTTP), `service` (rules), `repo` (SQL) per feature |
-| `src/realtime`   | Authenticated WebSocket hub                                  |
-| `src/jobs`       | Expiry of ciphertext and pairing sessions                    |
-| `migrations`     | Ordered `.sql` files                                         |
+| Path                 | Responsibility                                               |
+| -------------------- | ------------------------------------------------------------ |
+| `src/config`         | Environment validation (fails fast, never prints values)     |
+| `src/database`       | Connection pool, transactions, SQL migration runner          |
+| `src/security`       | Token hashing, Ed25519 verification, redacting logger        |
+| `src/middleware`     | Authentication, rate limits, validation, error shape         |
+| `src/modules/*`      | `routes` (HTTP), `service` (rules), `repo` (SQL) per feature |
+| `src/realtime`       | Authenticated WebSocket hub                                  |
+| `src/jobs`           | Expiry of ciphertext and pairing sessions                    |
+| `src/healthcheck.ts` | Container health probe (exit status only)                    |
+| `migrations`         | Ordered `.sql` files                                         |
+| `Dockerfile`         | Multi-stage production image, unprivileged user              |
 
 Database access uses `pg` directly with parameterised queries and hand-written SQL migrations.
 The schema is four small tables, so an ORM would add more surface than it removes.
@@ -34,3 +36,9 @@ npm run build && npm start
 
 Tests read `TEST_DATABASE_URL` (default `postgres://relaysms@127.0.0.1:54329/relaysms_test`) and
 truncate that database.
+
+## Deployment
+
+`Dockerfile` here, `../infra/compose.yaml` (PostgreSQL + relay + Caddy) and
+[docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md): deploy, upgrade, backup and restore.
+`node ../scripts/relay-smoke.mjs <base URL>` checks a running relay end to end.
