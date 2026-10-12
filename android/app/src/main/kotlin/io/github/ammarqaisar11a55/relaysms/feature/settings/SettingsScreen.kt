@@ -16,7 +16,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.Switch
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.fragment.app.FragmentActivity
 import io.github.ammarqaisar11a55.relaysms.background.BatteryOptimization
+import io.github.ammarqaisar11a55.relaysms.feature.pairing.formatTime
+import io.github.ammarqaisar11a55.relaysms.pairing.RotationResult
+import io.github.ammarqaisar11a55.relaysms.security.AppLock
 import io.github.ammarqaisar11a55.relaysms.background.ConnectionService
 import io.github.ammarqaisar11a55.relaysms.feature.home.openAppSettings
 import io.github.ammarqaisar11a55.relaysms.ui.components.InfoCard
@@ -132,6 +136,8 @@ fun SettingsScreen(
                 }
                 FullWidthButton("Delete all messages on this phone", onClick = { confirmDeleteAll = true }, outlined = true, modifier = Modifier.testTag("delete_all_messages"))
             }
+
+            SecuritySettings(settings)
 
             BackgroundSettings(settings, paired = peer != null)
 
@@ -251,6 +257,76 @@ fun SettingsScreen(
                 container.appScope.launch { container.resetCoordinator.resetEverything() }
             },
         )
+    }
+}
+
+@Composable
+private fun SecuritySettings(settings: AppSettings) {
+    val container = LocalAppContainer.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val identity by container.identityStore.identity.collectAsStateWithLifecycle()
+    var secureLock by remember { mutableStateOf(AppLock.deviceHasSecureLock(context)) }
+    var renewing by rememberSaveable { mutableStateOf(false) }
+    var renewResult by rememberSaveable { mutableStateOf<String?>(null) }
+    LifecycleResumeEffect(Unit) {
+        secureLock = AppLock.deviceHasSecureLock(context)
+        onPauseOrDispose { }
+    }
+
+    SectionHeader("Security")
+    SwitchRow(
+        title = "Lock RelaySMS",
+        subtitle = if (secureLock) "Ask for your fingerprint, face or screen lock each time RelaySMS is opened. This protects the inbox on an unlocked phone; it is not extra encryption."
+        else "Set a screen lock (PIN, pattern or password) on this phone first.",
+        checked = settings.appLock && secureLock,
+        enabled = secureLock,
+        tag = "app_lock",
+        onChange = { on ->
+            if (!on) {
+                scope.launch { container.preferences.setAppLock(false) }
+            } else {
+                // Turning the lock on requires passing it once, so nobody can lock the owner out.
+                (context as? FragmentActivity)?.let { activity ->
+                    AppLock.prompt(activity, "Confirm to turn on the lock", onSuccess = {
+                        container.appLock.unlock()
+                        scope.launch { container.preferences.setAppLock(true) }
+                    })
+                }
+            }
+        },
+    )
+    SwitchRow(
+        title = "Hide from screenshots and recent apps",
+        subtitle = "Blocks screenshots and screen recording of RelaySMS and blanks its preview in the app switcher. Pairing screens are always protected.",
+        checked = settings.blockScreenshots,
+        tag = "block_screenshots",
+        onChange = { scope.launch { container.preferences.setBlockScreenshots(it) } },
+    )
+    identity?.let { id ->
+        StatusRow("Relay credential issued", formatTime(container.credentialRotator.issuedAt(id)), Tone.NEUTRAL)
+        Text(
+            "RelaySMS renews the credential it uses to sign in to your relay every 30 days. Renew it now if you think it may have been copied.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FullWidthButton(
+            if (renewing) "Renewing…" else "Renew credential now",
+            enabled = !renewing,
+            outlined = true,
+            modifier = Modifier.testTag("renew_credential"),
+            onClick = {
+                renewing = true
+                scope.launch {
+                    renewResult = when (container.credentialRotator.rotateIfDue(force = true)) {
+                        RotationResult.ROTATED -> "Credential renewed."
+                        else -> "Could not reach the relay. The current credential is unchanged."
+                    }
+                    renewing = false
+                }
+            },
+        )
+        renewResult?.let { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("renew_result")) }
     }
 }
 

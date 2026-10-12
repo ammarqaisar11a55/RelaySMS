@@ -264,8 +264,10 @@ describe('realtime channel hardening', () => {
 
     const quiet = await openSocket(url, d.auth);
     const quietClosed = closeCode(quiet);
-    await request(h.app).post('/v1/devices/me/token').set(d.auth).expect(200);
+    const rotated = await request(h.app).post('/v1/devices/me/token').set(d.auth).expect(200);
     expect(await quietClosed).toBe(4401);
+    // The old token is refused once the new one has been used (rotation grace, see devices.test).
+    expect(await upgradeStatus(url, { Authorization: `Bearer ${rotated.body.token}` })).toBe(101);
     expect(await upgradeStatus(url, d.auth)).toBe(401);
   });
 });

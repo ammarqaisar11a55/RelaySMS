@@ -12,7 +12,15 @@ import kotlinx.serialization.json.Json
 
 /** This device's registration with one relay. [token] is a bearer credential. */
 @Serializable
-data class Identity(val serverUrl: String, val deviceId: String, val token: String, val role: String, val registeredAtMillis: Long)
+data class Identity(
+    val serverUrl: String,
+    val deviceId: String,
+    val token: String,
+    val role: String,
+    val registeredAtMillis: Long,
+    /** When [token] was last issued. Zero in records written before rotation existed. */
+    val tokenIssuedAtMillis: Long = 0,
+)
 
 /** The device this one is paired with, as verified during pairing. */
 @Serializable

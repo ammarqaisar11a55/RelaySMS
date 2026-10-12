@@ -37,6 +37,10 @@ data class AppSettings(
     val notificationPreview: Boolean = false,
     /** Keep the relay connection open with a foreground service while the app is not on screen. */
     val backgroundConnection: Boolean = false,
+    /** Ask for the phone's screen lock before showing the app. */
+    val appLock: Boolean = false,
+    /** Keep the app out of screenshots, screen recordings and the recent-apps preview. */
+    val blockScreenshots: Boolean = true,
 ) {
     val onboardingComplete: Boolean get() = role != null
 
@@ -74,6 +78,8 @@ class AppPreferences(private val store: DataStore<Preferences>) {
                 notificationsEnabled = p[KEY_NOTIFICATIONS] ?: true,
                 notificationPreview = p[KEY_NOTIFICATION_PREVIEW] ?: false,
                 backgroundConnection = p[KEY_BACKGROUND_CONNECTION] ?: false,
+                appLock = p[KEY_APP_LOCK] ?: false,
+                blockScreenshots = p[KEY_BLOCK_SCREENSHOTS] ?: true,
             )
         }
 
@@ -96,6 +102,10 @@ class AppPreferences(private val store: DataStore<Preferences>) {
     suspend fun setAllowlistOnly(enabled: Boolean) = store.edit { it[KEY_ALLOWLIST_ONLY] = enabled }
 
     suspend fun setRetentionDays(days: Int) = store.edit { it[KEY_RETENTION_DAYS] = days }
+
+    suspend fun setAppLock(enabled: Boolean) = store.edit { it[KEY_APP_LOCK] = enabled }
+
+    suspend fun setBlockScreenshots(enabled: Boolean) = store.edit { it[KEY_BLOCK_SCREENSHOTS] = enabled }
 
     suspend fun setBackgroundConnection(enabled: Boolean) = store.edit { it[KEY_BACKGROUND_CONNECTION] = enabled }
 
@@ -134,6 +144,8 @@ class AppPreferences(private val store: DataStore<Preferences>) {
         val KEY_FORWARDING = booleanPreferencesKey("forwarding_enabled")
         val KEY_ALLOWLIST_ONLY = booleanPreferencesKey("allowlist_only")
         val KEY_RETENTION_DAYS = intPreferencesKey("retention_days")
+        val KEY_APP_LOCK = booleanPreferencesKey("app_lock")
+        val KEY_BLOCK_SCREENSHOTS = booleanPreferencesKey("block_screenshots")
         val KEY_BACKGROUND_CONNECTION = booleanPreferencesKey("background_connection")
         val KEY_NOTIFICATIONS = booleanPreferencesKey("notifications_enabled")
         val KEY_NOTIFICATION_PREVIEW = booleanPreferencesKey("notification_preview")

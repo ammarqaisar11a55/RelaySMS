@@ -27,6 +27,7 @@ import io.github.ammarqaisar11a55.relaysms.feature.pairing.PairedDeviceScreen
 import io.github.ammarqaisar11a55.relaysms.feature.pairing.PairingScreen
 import io.github.ammarqaisar11a55.relaysms.feature.onboarding.WelcomeScreen
 import io.github.ammarqaisar11a55.relaysms.feature.settings.SettingsScreen
+import io.github.ammarqaisar11a55.relaysms.security.LockScreen
 import io.github.ammarqaisar11a55.relaysms.ui.components.LoadingState
 import io.github.ammarqaisar11a55.relaysms.ui.theme.RelayTheme
 
@@ -39,8 +40,12 @@ fun AppRoot(container: AppContainer) {
         RelayTheme(settings?.themeMode ?: ThemeMode.SYSTEM) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 val loaded = settings
+                val locked by container.appLock.locked.collectAsStateWithLifecycle()
                 if (loaded == null) {
                     LoadingState()
+                } else if (loaded.appLock && loaded.role != null && locked) {
+                    // Nothing below this point is composed while locked: no message is on screen.
+                    LockScreen(onUnlocked = container.appLock::unlock)
                 } else {
                     // Re-keying on the start destination rebuilds the back stack whenever the role
                     // is chosen or reset, so screens of the previous role can never be returned to.

@@ -1,7 +1,12 @@
 import type { IncomingMessage } from 'node:http';
 import type { RequestHandler, Response } from 'express';
 import type { AppContext } from '../context.js';
-import { findDevice, touchDevice, type Device } from '../modules/devices/devices.repo.js';
+import {
+  findDevice,
+  retirePreviousToken,
+  touchDevice,
+  type Device,
+} from '../modules/devices/devices.repo.js';
 import { parseDeviceToken, secretMatches } from '../security/tokens.js';
 import { errors } from './errors.js';
 
@@ -17,7 +22,17 @@ export async function authenticate(ctx: AppContext, header: string | undefined):
   if (!parsed) return null;
   const device = await findDevice(ctx.db, parsed.deviceId);
   if (!device || device.revokedAt) return null;
-  if (!secretMatches(parsed.secret, device.tokenHash)) return null;
+  if (secretMatches(parsed.secret, device.tokenHash)) {
+    // First use of a freshly rotated credential retires the one it replaced.
+    if (device.previousTokenHash) await retirePreviousToken(ctx.db, device.id);
+  } else {
+    const previousStillValid =
+      device.previousTokenHash !== null &&
+      device.previousTokenExpiresAt !== null &&
+      device.previousTokenExpiresAt.getTime() > ctx.now().getTime() &&
+      secretMatches(parsed.secret, device.previousTokenHash);
+    if (!previousStillValid) return null;
+  }
   const now = ctx.now();
   if (now.getTime() - device.lastSeenAt.getTime() > TOUCH_INTERVAL_MS) {
     await touchDevice(ctx.db, device.id, now);

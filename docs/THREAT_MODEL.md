@@ -54,8 +54,14 @@ Each entry: what could happen, what stops or limits it, and what remains.
   are generic by default and show content only if the user opts in (Module 7, not part of this
   review); the QR pairing screen blocks screenshots. From the source phone, **Revoke device** deletes the link and all queued
   ciphertext on the relay and stops forwarding (*tested*): nothing new reaches the stolen phone.
-- *Residual:* **RelaySMS has no app lock of its own.** Anyone who can unlock the phone, or who
-  takes it while unlocked, can open the app and read everything in the inbox. Revocation does not
+- *Control added in the Android part of this module:* an optional **app lock** (Settings →
+  Security → Lock RelaySMS) asks for the phone's fingerprint, face or screen lock every time the
+  app comes to the screen; while locked no message is composed on screen (*tested*). Screenshots,
+  screen recording and the recent-apps preview are blocked by default (*tested*).
+- *Residual:* the app lock is off unless the user turns it on, and it is a screen gate, not a
+  second layer of encryption: the storage key is not bound to the unlock. With the lock off,
+  anyone who can unlock the phone, or who takes it while unlocked, can read the inbox.
+  Notification previews, if the user enabled them, are shown outside the lock. Revocation does not
   erase messages already delivered. On a rooted or exploited phone the Keystore protection can be
   bypassed while the device is unlocked. Mitigations available to the user: a strong screen lock,
   a short retention period (Settings → Message retention), remote wipe through the phone vendor,
@@ -113,12 +119,16 @@ Each entry: what could happen, what stops or limits it, and what remains.
   messages: uploads must be signed with the source's Ed25519 key and the companion verifies the
   signature itself (*tested*). Tokens are sent only in the `Authorization` header, never in a URL
   (*tested*), responses are marked `no-store` (*tested*), the relay stores only a hash, a token
-  can be rotated with immediate effect and rotation closes open connections (*tested*).
+  can be rotated and rotation closes open connections (*tested*). The apps renew their token
+  every 30 days and on request (Settings → Security → Renew credential now) (*tested*). The
+  replaced token stops working when the new one is first used, which the app does at once, and
+  after 24 hours at the latest; this grace period exists so that a lost answer cannot lock a
+  device out (*tested*).
 - *Residual:* a stolen token allows **denial of service against that pairing**: acknowledging
   pending messages (which deletes them undelivered), revoking the link, deleting the device, or
-  starting pairing sessions. It also reveals the metadata of that one device. The apps do not yet
-  rotate their token automatically; a token is replaced only by pairing again. If you suspect a
-  token leaked, reset the phone in the app and pair again.
+  starting pairing sessions. It also reveals the metadata of that one device. A copied token
+  stays usable until the next renewal (up to 30 days). If you suspect a token leaked, use
+  "Renew credential now", or reset the phone in the app and pair again.
 
 ### T6. Network interception
 
@@ -243,14 +253,14 @@ weight:
 
 | # | Issue | Severity | Status |
 | --- | --- | --- | --- |
-| 1 | No app lock: an unlocked companion exposes the inbox (T1) | Medium | Open. Relies on the device screen lock |
-| 2 | Tokens are not rotated automatically (T5) | Low | Open. Server support exists and is tested |
+| 1 | An unlocked companion exposes the inbox (T1) | Medium | Mitigated: optional app lock and default screenshot blocking. The lock is opt-in and is not extra encryption |
+| 2 | A stolen relay token stays valid until renewed (T5) | Low | Mitigated: automatic renewal every 30 days and on request; old token valid for at most 24 h after a renewal that was never confirmed |
 | 3 | No forward secrecy (T4) | Low for a personal relay with 72 h retention | Accepted by design, documented |
 | 4 | Unpaired device records are never garbage-collected (T13) | Low | Open. Mitigated by `REGISTRATION_CODE` |
 | 5 | Queue-size check and insert are separate statements, so concurrent uploads can exceed the bound by a few messages | Low | Open. Bounded by the per-device rate limit |
 | 6 | Container deployment, real phones and real carrier traffic are untested | Unknown | Blocked on Docker and devices |
 
-Items 1 and 2 need Android changes and belong to the Android part of this module.
+Items 1 and 2 were addressed in the Android part of this module (see the review record).
 
 ## 6. Review record
 
@@ -285,6 +295,26 @@ Dependency check (`npm audit`, same date):
   suite passes on it and `npm audit` now reports **0 vulnerabilities**.
 - Android dependencies were not audited with a vulnerability scanner in this review.
 
-Not done: penetration testing, fuzzing, static-analysis tooling beyond ESLint and the TypeScript
-compiler, any review by a second person, and review of the Android code beyond the facts cited
-above (Android hardening is tracked separately in Module 9).
+Android review, 2026-10-12, by reading `android/app/src/main` and the merged manifest.
+
+Checked and found sound: the only components reachable from other apps are the launcher activity
+and the SMS receiver, which demands `BROADCAST_SMS` (*tested on device*); no permission beyond the
+documented set, and none for contacts, location, phone state, accessibility or reading stored SMS
+(*tested*); backup and device transfer disabled (*tested*); release build is not debuggable,
+permits no cleartext traffic, trusts only system certificate authorities and contains no debug
+server default (`scripts/release-check.sh`, run on the R8-minified release APK); all logging goes
+through one function that accepts only fixed names, enums, counts and exception class names, and no
+other file writes to the log (*unit test over the source tree*); pairing text, notification
+intents and relay responses are validated before use; private keys and the relay token are stored
+only in Keystore-wrapped form (*tested on device*).
+
+Added in this review: app lock; default screenshot blocking; automatic and manual renewal of the
+relay token, with a relay-side grace period (migration `003`) after the first design was found to
+risk locking a device out when the relay's answer is lost.
+
+Android dependency check: `scripts/android-dependency-scan.sh` looked up all 147 libraries of the
+release runtime classpath in the OSV database: **no known vulnerabilities** on that date.
+
+Not done: penetration testing, fuzzing, static-analysis tooling beyond ESLint, the TypeScript
+compiler and Android Lint, any review by a second person, a runtime test of the minified release
+build (planned with release packaging), and any test on physical phones.

@@ -1,8 +1,7 @@
 package io.github.ammarqaisar11a55.relaysms.feature.pairing
 
 import android.Manifest
-import android.view.WindowManager
-import androidx.activity.ComponentActivity
+import io.github.ammarqaisar11a55.relaysms.MainActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -78,13 +77,13 @@ fun QrCode(text: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** Blocks screenshots and screen recording while a screen with pairing secrets is visible. */
+/** Blocks screenshots and screen recording while a screen with pairing secrets is visible, whatever the setting. */
 @Composable
 fun SecureWindow() {
-    val activity = LocalContext.current as? ComponentActivity
+    val activity = LocalContext.current as? MainActivity
     DisposableEffect(activity) {
-        activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        onDispose { activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
+        activity?.windowSecurity?.acquire()
+        onDispose { activity?.windowSecurity?.release() }
     }
 }
 

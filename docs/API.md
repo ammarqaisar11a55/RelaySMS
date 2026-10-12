@@ -28,7 +28,7 @@ The relay never receives plaintext. `ciphertext` is opaque to it.
 | --- | --- | --- | --- | --- |
 | POST | `/v1/devices` | – | `{role: "source"\|"companion", hpkePublicKey: b64url(32), signingPublicKey: b64url(32), registrationCode?}` | `201 {deviceId, token}` — the token is shown once |
 | GET | `/v1/devices/me` | yes | – | `{deviceId, role, createdAt, serverTime, peer: null \| {deviceId, role, hpkePublicKey, signingPublicKey, linkedAt, lastSeenAt, online, awaitingPeer}}` |
-| POST | `/v1/devices/me/token` | yes | – | `{token}` — old token stops working immediately |
+| POST | `/v1/devices/me/token` | yes | – | `{token}` — the old token stops working when the new one is first used, and after 24 hours at the latest; open connections are closed |
 | DELETE | `/v1/devices/me` | yes | – | `204` — credential disabled; link, queued messages and pairing sessions deleted |
 | DELETE | `/v1/link` | yes | – | `{revoked: boolean}` — removes the link and all queued ciphertext between the two devices |
 

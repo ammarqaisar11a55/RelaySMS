@@ -11,7 +11,7 @@ import {
   insertDevice,
   peerOf,
   revokeDevice,
-  updateTokenHash,
+  rotateTokenHash,
   type Device,
   type DeviceRole,
 } from './devices.repo.js';
@@ -79,10 +79,18 @@ export async function describeDevice(ctx: AppContext, device: Device) {
   };
 }
 
-/** Issues a new credential and invalidates the old one immediately. */
+/** How long the previous credential keeps working if the new one is never used. */
+export const TOKEN_ROTATION_GRACE_MS = 24 * 3_600_000;
+
+/**
+ * Issues a new credential. The old one stops working as soon as the new one is used, and after
+ * one day at the latest; until then it still works, so a device that never received the answer
+ * is not locked out. Open connections are closed either way.
+ */
 export async function rotateToken(ctx: AppContext, device: Device): Promise<{ token: string }> {
   const secret = generateSecret();
-  await updateTokenHash(ctx.db, device.id, hashSecret(secret));
+  const graceUntil = new Date(ctx.now().getTime() + TOKEN_ROTATION_GRACE_MS);
+  await rotateTokenHash(ctx.db, device.id, hashSecret(secret), graceUntil);
   ctx.hub.disconnect(device.id);
   ctx.logger.info({ deviceId: device.id }, 'device token rotated');
   return { token: formatDeviceToken(device.id, secret) };

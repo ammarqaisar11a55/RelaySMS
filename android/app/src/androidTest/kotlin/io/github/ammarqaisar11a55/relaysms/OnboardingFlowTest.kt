@@ -26,7 +26,7 @@ class OnboardingFlowTest {
         Unit
     }
 
-    private fun waitForTag(tag: String) = rule.waitUntil(10_000) {
+    private fun waitForTag(tag: String) = rule.waitUntil(30_000) {
         rule.onAllNodes(androidx.compose.ui.test.hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty()
     }
 

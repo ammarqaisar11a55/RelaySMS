@@ -261,13 +261,27 @@ acceptance criteria need the server.
 
 ## Module 9 — Security hardening
 
-- Status: `IN PROGRESS` — relay review, relay fixes, dependency check and threat model are done.
-  **Remaining (Android, not started):** review of the Android code against the plan's checklist;
-  an app lock or equivalent for the companion inbox; automatic rotation of the relay credential
-  (`POST /v1/devices/me/token` exists and is tested, the app never calls it); a check that
-  release builds contain no debug logging or cleartext allowance; a vulnerability scan of the
-  Android dependencies. The Android statements in `THREAT_MODEL.md` were taken from the code and
-  earlier module records, not re-tested in this module.
+- Status: `COMPLETED` (relay part in `d1a3b7e`, Android part in the commit named below). No
+  unresolved high-severity issue is known; open medium and low items are in `THREAT_MODEL.md` §5
+- Created (Android part): `security/AppLock` + `LockScreen` (opt-in, phone's own biometric or
+  screen lock, nothing composed while locked), `WindowSecurity` (screenshots blocked by default,
+  always on pairing screens), `pairing/CredentialRotator` (30-day and on-demand renewal), security
+  settings; release build type (R8, resource shrinking, signing from an untracked
+  `keystore.properties`) and `proguard-rules.pro`; `scripts/release-check.sh`;
+  `scripts/android-dependency-scan.sh`; relay migration `003_token_rotation_grace.sql` so the
+  replaced token works until the new one is first used (at most 24 h) — the first rotation design
+  could lock a device out if the relay's answer was lost
+- Tests (Android part): Android JVM 100 with relay (adds `SecurityHardeningTest` x6: rotation
+  keeps the pairing working, lost-answer rotation does not lock out, due/not-due, app lock state,
+  window protection, logging API and no stray log calls) — PASS; relay 55 (adds 3 rotation grace
+  tests) — PASS; on-device 48 (adds `SecurityOnDeviceTest` x4: exported components, permissions
+  and backup, screenshot flag, lock hides messages) — PASS on rerun; one earlier full run had a
+  10 s UI wait time out in `OnboardingFlowTest`, which passed alone and on the next full run (wait
+  raised to 30 s); `release-check.sh` on the minified release APK — PASS;
+  `android-dependency-scan.sh` (OSV, 147 libraries) — no known vulnerabilities
+- Not verified: the biometric/credential prompt itself (the emulator has no screen lock, so the
+  switch is disabled there and the unlock was simulated in the test); runtime behaviour of the
+  minified release build
 - Created (relay part): `docs/THREAT_MODEL.md` (13 threats incl. every one named in the plan,
   controls, residual risks, non-goals, open issues, review record);
   `server/src/middleware/upgradeLimit.ts`; `server/tests/hardening.test.ts`
@@ -288,7 +302,8 @@ acceptance criteria need the server.
 - Known issues: no unresolved high-severity issue known; open medium/low items are listed in
   `THREAT_MODEL.md` §5 (no app lock, no automatic token rotation, no forward secrecy, unpaired
   device records not garbage-collected). No penetration test, fuzzing or second-person review
-- Commit message (relay part): `feat(security): harden relay and add threat model`
+- Commit (relay part): `d1a3b7e` — `feat(security): harden relay and add threat model`
+- Commit message (Android part): `feat(security): add app lock, credential renewal and release checks`
 
 ## Module 8 — Persistent connectivity and background reliability
 
@@ -313,7 +328,8 @@ acceptance criteria need the server.
 - Build: `:app:assembleDebug`, `:app:lintDebug` — PASS
 - Known issues: with the background connection off, a closed companion app receives only at
   Android's periodic sync; that path was not timed; real-device Doze behaviour is unverified
-- Commit message: `feat(background): keep delivery working in the background`
+- Commit: `031710e` — `feat(background): keep delivery working in the background`
+- Push: SUCCESS
 
 ## Modules
 
@@ -327,7 +343,7 @@ acceptance criteria need the server.
 | 6 | Companion inbox and local storage | COMPLETED |
 | 7 | OTP detection, copying and notifications | COMPLETED |
 | 8 | Persistent connectivity and background reliability | COMPLETED |
-| 9 | Security hardening | IN PROGRESS (relay and threat model done; Android pending) |
+| 9 | Security hardening | COMPLETED |
 | 10 | Backend deployment and configuration | COMPLETED (container files not executed: no Docker on dev host) |
 | 11 | Automated testing and end-to-end validation | NOT STARTED |
 | 12 | UX polish and accessibility | NOT STARTED |

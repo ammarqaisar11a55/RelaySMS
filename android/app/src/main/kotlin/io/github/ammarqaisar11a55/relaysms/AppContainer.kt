@@ -11,7 +11,9 @@ import io.github.ammarqaisar11a55.relaysms.core.model.DeviceRole
 import io.github.ammarqaisar11a55.relaysms.core.network.RelayApi
 import io.github.ammarqaisar11a55.relaysms.core.prefs.AppPreferences
 import io.github.ammarqaisar11a55.relaysms.core.security.DeviceKeyStore
+import io.github.ammarqaisar11a55.relaysms.pairing.CredentialRotator
 import io.github.ammarqaisar11a55.relaysms.pairing.IdentityStore
+import io.github.ammarqaisar11a55.relaysms.security.AppLock
 import io.github.ammarqaisar11a55.relaysms.pairing.LinkMonitor
 import io.github.ammarqaisar11a55.relaysms.pairing.PairingActivity
 import io.github.ammarqaisar11a55.relaysms.pairing.PairingManager
@@ -78,6 +80,10 @@ class AppContainer(context: Context) {
     val identityStore: IdentityStore by lazy { SecureIdentityStore(appContext) { localCipher } }
 
     private val pairingActivity = PairingActivity()
+
+    val appLock = AppLock()
+
+    val credentialRotator: CredentialRotator by lazy { CredentialRotator(identityStore, apiFactory) }
 
     val linkMonitor: LinkMonitor by lazy { LinkMonitor(identityStore, apiFactory, onPeerRemoved = ::onPeerRemoved, pairingActivity = pairingActivity) }
 
@@ -213,6 +219,7 @@ class AppContainer(context: Context) {
 
     fun onAppBackground() {
         appInForeground = false
+        appLock.onBackground()
         updateSocket()
     }
 
@@ -262,7 +269,11 @@ class AppContainer(context: Context) {
             // Touch Keystore-backed state off the main thread so the first screen does not wait for it.
             identityStore.identity.value
             if (database.outboxDao().pendingCount() > 0) deliveryScheduler.schedule()
-            if (identityStore.identity.value != null) linkMonitor.refresh()
+            if (identityStore.identity.value != null) {
+                linkMonitor.refresh()
+                // Renew the relay credential when it is old. Skipped mid-pairing by its own checks.
+                if (!pairingActivity.inProgress) runCatching { credentialRotator.rotateIfDue() }
+            }
             if (identityStore.peer.value != null) SyncWorker.ensurePeriodic(appContext)
             applyRetention()
         }

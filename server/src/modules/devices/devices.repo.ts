@@ -8,6 +8,8 @@ export interface Device {
   hpkePublicKey: Buffer;
   signingPublicKey: Buffer;
   tokenHash: Buffer;
+  previousTokenHash: Buffer | null;
+  previousTokenExpiresAt: Date | null;
   createdAt: Date;
   lastSeenAt: Date;
   revokedAt: Date | null;
@@ -19,6 +21,8 @@ interface DeviceRow {
   hpke_public_key: Buffer;
   signing_public_key: Buffer;
   token_hash: Buffer;
+  previous_token_hash: Buffer | null;
+  previous_token_expires_at: Date | null;
   created_at: Date;
   last_seen_at: Date;
   revoked_at: Date | null;
@@ -30,6 +34,8 @@ const toDevice = (r: DeviceRow): Device => ({
   hpkePublicKey: r.hpke_public_key,
   signingPublicKey: r.signing_public_key,
   tokenHash: r.token_hash,
+  previousTokenHash: r.previous_token_hash,
+  previousTokenExpiresAt: r.previous_token_expires_at,
   createdAt: r.created_at,
   lastSeenAt: r.last_seen_at,
   revokedAt: r.revoked_at,
@@ -62,8 +68,28 @@ export async function touchDevice(q: Queryable, id: string, now: Date): Promise<
   await q.query('UPDATE devices SET last_seen_at = $2 WHERE id = $1', [id, now]);
 }
 
-export async function updateTokenHash(q: Queryable, id: string, tokenHash: Buffer): Promise<void> {
-  await q.query('UPDATE devices SET token_hash = $2 WHERE id = $1', [id, tokenHash]);
+/**
+ * Installs a new credential. The current one becomes the "previous" credential, usable until
+ * [previousValidUntil] or until the new one is first used, whichever comes first.
+ */
+export async function rotateTokenHash(
+  q: Queryable,
+  id: string,
+  tokenHash: Buffer,
+  previousValidUntil: Date,
+): Promise<void> {
+  await q.query(
+    `UPDATE devices SET previous_token_hash = token_hash, previous_token_expires_at = $3, token_hash = $2 WHERE id = $1`,
+    [id, tokenHash, previousValidUntil],
+  );
+}
+
+/** The new credential was used: the device has it, so the previous one is no longer needed. */
+export async function retirePreviousToken(q: Queryable, id: string): Promise<void> {
+  await q.query(
+    'UPDATE devices SET previous_token_hash = NULL, previous_token_expires_at = NULL WHERE id = $1',
+    [id],
+  );
 }
 
 /** Marks the device revoked and removes everything that could still be delivered to or from it. */

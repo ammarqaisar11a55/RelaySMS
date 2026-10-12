@@ -87,14 +87,37 @@ describe('device registration and authentication', () => {
     }
   });
 
-  it('rotates a token and invalidates the old one immediately', async () => {
+  it('rotates a token: the old one dies when the new one is first used', async () => {
     const d = await registerDevice(h.app, 'source');
     const rotated = await request(h.app).post('/v1/devices/me/token').set(d.auth).expect(200);
+    const fresh = { Authorization: `Bearer ${rotated.body.token}` };
+    expect(rotated.body.token).not.toBe(d.token);
+    // The answer might have been lost: until the new token is used, the old one still works.
+    await request(h.app).get('/v1/devices/me').set(d.auth).expect(200);
+    await request(h.app).get('/v1/devices/me').set(fresh).expect(200);
     await request(h.app).get('/v1/devices/me').set(d.auth).expect(401);
-    await request(h.app)
-      .get('/v1/devices/me')
-      .set('Authorization', `Bearer ${rotated.body.token}`)
-      .expect(200);
+    await request(h.app).get('/v1/devices/me').set(fresh).expect(200);
+    const row = await h.db.query('SELECT previous_token_hash FROM devices WHERE id = $1', [d.id]);
+    expect(row.rows[0].previous_token_hash).toBeNull();
+  });
+
+  it('a rotated-out token expires by itself after the grace period', async () => {
+    const d = await registerDevice(h.app, 'source');
+    const first = await request(h.app).post('/v1/devices/me/token').set(d.auth).expect(200);
+    h.advance(24 * 3_600_000 + 1000);
+    await request(h.app).get('/v1/devices/me').set(d.auth).expect(401);
+    await request(h.app).get('/v1/devices/me').set('Authorization', `Bearer ${first.body.token}`).expect(200);
+  });
+
+  it('only one previous token is ever accepted', async () => {
+    const d = await registerDevice(h.app, 'source');
+    // Two rotations in a row with the original token: the first rotated-in token is replaced
+    // before it was ever used, and must not work.
+    const a = await request(h.app).post('/v1/devices/me/token').set(d.auth).expect(200);
+    const b = await request(h.app).post('/v1/devices/me/token').set(d.auth).expect(200);
+    await request(h.app).get('/v1/devices/me').set('Authorization', `Bearer ${b.body.token}`).expect(200);
+    await request(h.app).get('/v1/devices/me').set('Authorization', `Bearer ${a.body.token}`).expect(401);
+    await request(h.app).get('/v1/devices/me').set(d.auth).expect(401);
   });
 
   it('requires the registration code when the relay is configured with one', async () => {
