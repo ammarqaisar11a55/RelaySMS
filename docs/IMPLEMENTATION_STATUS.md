@@ -475,6 +475,26 @@ acceptance criteria need the server.
 - Commit: `5d09929` — `feat(sms): add default SMS app support and sending through the source phone`
 - Push: SUCCESS; CI on GitHub passed for the following commit `9523757`, which contains this module
 
+## Defect found on real phones in v0.9.0, fixed in v0.9.1 (2026-10-13)
+
+- Report from the owner after installing v0.9.0 on both phones and pairing them: the app stopped
+  when granting the SMS permission on the source phone
+- Reproduced on the emulator with the published APK: tapping "Continue" in the permission
+  explanation crashed with `IllegalArgumentException: Can only use lower 16 bits for requestCode`
+  in `MainActivity`
+- Cause: since the app lock (Module 9) `MainActivity` extends `FragmentActivity`, and the
+  biometric library pulled in androidx.fragment 1.2.5, whose `FragmentActivity` rejects the
+  request codes of the Activity Result API. **Every in-app permission prompt and the default-SMS
+  role request were affected**, not only SMS
+- Why the tests missed it: all device tests granted permissions from the shell or through
+  UiAutomation and never went through the app's own request
+- Fix: androidx.fragment pinned to 1.8.5. Verified by repeating the crashing steps on the
+  minified build (prompt appears, grant succeeds, a following SMS is handled, no crash) and by
+  `PermissionPromptTest` (runtime permission launcher, activity-result launcher, the source
+  screen's own buttons). Not done: running the new tests against the old dependency to see them
+  fail
+- On-device suite after the fix: 64 — PASS
+
 ## Open items that need the owner (as of 2026-10-13)
 
 | Item | State | What is needed |

@@ -142,6 +142,10 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.androidx.biometric)
+    // The biometric library depends on a very old androidx.fragment whose FragmentActivity rejects
+    // the request codes used by the Activity Result API (crash on every permission prompt).
+    // Pin a current version explicitly.
+    implementation(libs.androidx.fragment)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
