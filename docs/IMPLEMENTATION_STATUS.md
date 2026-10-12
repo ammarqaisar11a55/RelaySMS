@@ -379,7 +379,65 @@ acceptance criteria need the server.
 - Build: `:app:assembleDebug` — PASS
 - Known issues: English only, strings in code; not tested with TalkBack or Switch Access; pairing
   screens cannot be screenshotted by design
-- Commit message: `feat(ui): complete status states and accessibility checks`
+- Commit: `19d43f2` — `feat(ui): complete status states and accessibility checks`
+- Push: SUCCESS
+
+## Additional requirement — Vercel deployment on a shared PostgreSQL database
+
+- Status: `IN PROGRESS` — code, tests and Vercel project are done; **the deployment is not live**
+  until `DATABASE_URL` and `CRON_SECRET` are added to the Vercel project (left to the owner,
+  because they are secrets) and a deployment is triggered
+- Created: `server/src/vercel.ts` + `server/api/index.js` + `server/vercel.json` (serverless
+  entry, migrations in the build step, daily clean-up cron), `GET /v1/info`,
+  `/internal/cron/expire`, poll mode (`REALTIME=poll`) with activity-based presence,
+  libpq-style `sslmode` handling, `DATABASE_SCHEMA` (default `relaysms`; `public` refused),
+  migrations `004` (row level security) and `005` (tables renamed `relay_*`), Android poll mode
+  in `RelaySocket` with "Checking for messages" status, `docs/VERCEL.md`
+- Shared-database safety: the target database was inspected read-only and already holds other
+  applications (a `public` schema with 14 tables including `devices`, and a `pwma` schema).
+  RelaySMS creates and uses only its own schema, verifies it is inside that schema before any
+  DDL, and uses table names that exist nowhere else. **Nothing has been written to that database
+  by this work**; the first deployment's build step will create the schema
+- Vercel: project `relaysms` created in the owner's team with the CLI (the Vercel connector
+  returned 403 for project creation), GitHub repository connected, root directory `server`,
+  Node 22. No environment variables set, no deployment made
+- Tests: relay 62 (adds `serverless.test.ts` x7: isolation next to another app's
+  `public.devices` and `public.messages`, schema refusal, sslmode parsing, info, presence, cron
+  secret, serverless entry point) — PASS; Android JVM 112 against the relay in WebSocket mode and
+  again in poll mode — PASS
+- Not verified: anything on Vercel itself, and the connection to the Supabase pooler (TLS and
+  session settings), which can only be checked once the secret is in place
+- CI: the run for `28cd053` failed in the secret scan only, on a made-up cron secret in the new
+  test file (confirmed locally as the single finding); the value was replaced and the historical
+  string allowlisted in the next commit
+- Commit: `28cd053` — `feat(server): support Vercel and shared PostgreSQL databases`; Push: SUCCESS
+
+## Module 13 — Release builds and private installation
+
+- Status: `COMPLETED` for building and checking; **no release has been published yet** (the
+  release workflow needs the owner's signing secrets and runs when a version tag is pushed)
+- Created: version from Gradle properties (`relaysmsVersionName`, `relaysmsVersionCode`);
+  `staging` build type (the minified release build, allowed to reach the local relay, debug
+  signed, never distributed); `scripts/release-smoke.sh`; `PeerTool pair-source`;
+  `.github/workflows/release.yml` (tag `vX.Y.Z` or manual run: unit tests, signed
+  `assembleRelease`, signature and release checks, GitHub release with APK and SHA-256);
+  `scripts/create-release-keystore.sh`; `docs/INSTALL.md` (install on both phones, restricted
+  settings, Samsung Auto Blocker, pairing, upgrade, rollback, signing key, removal); full
+  `README.md`
+- Final checklist: debug build — PASS; release build (R8) — PASS; database migrations — PASS
+  (`MigrationTest`, relay migrations 001–005); tests — PASS; no hardcoded production secrets —
+  PASS (secret scan over history: no findings); message contents absent from logs — PASS;
+  pairing and revocation — PASS; offline retry — PASS; deduplication — PASS; companion needs no
+  SIM — by design, no telephony call on the companion path, not checked on a SIM-less phone;
+  sender requires SMS permission — PASS; limitations documented — yes
+- Tests: `release-check.sh` on the unsigned R8 release APK — PASS; `release-smoke.sh` on the
+  emulator with the minified build (start, onboarding, key generation, registration, pairing
+  with matching codes, encrypted message received and stored, restart persistence, code
+  detection) — PASS; Android JVM 112 — PASS; lint — PASS
+- Not verified: a signed release build (no signing key exists yet), the release workflow run,
+  installation from a file on a physical phone
+- Known issues: none known in the build; see `INSTALL.md` §8
+- Commit message: `feat(release): add release build, GitHub release workflow and install guide`
 
 ## Modules
 
@@ -397,6 +455,6 @@ acceptance criteria need the server.
 | 10 | Backend deployment and configuration | COMPLETED (container files not executed: no Docker on dev host) |
 | 11 | Automated testing and end-to-end validation | COMPLETED (emulator and JVM; real devices not tested) |
 | 12 | UX polish and accessibility | COMPLETED |
-| 13 | Release builds and private installation | NOT STARTED |
+| 13 | Release builds and private installation | COMPLETED (no release published yet) |
 | 14 | Default SMS app support and remote sending | NOT STARTED |
 | — | CI and quality gates | COMPLETED |

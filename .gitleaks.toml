@@ -12,4 +12,6 @@ regexes = [
   '''Zx9-[a-z-]+-Zx9''',
   '''CHANGE_ME''',
   '''relaysms_ci''',
+  # Dummy value used by one test in commit 28cd053; replaced since, but still in history.
+  '''cron-secret-0123456789''',
 ]

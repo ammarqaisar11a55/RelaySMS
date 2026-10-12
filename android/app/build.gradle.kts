@@ -22,8 +22,10 @@ android {
         applicationId = "io.github.ammarqaisar11a55.relaysms"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // Version comes from the release tag in CI (-PrelaysmsVersionName=1.2.3 -PrelaysmsVersionCode=45)
+        // and falls back to a development version locally. versionCode must grow with every release.
+        versionCode = (project.findProperty("relaysmsVersionCode") as String?)?.toIntOrNull() ?: 1
+        versionName = (project.findProperty("relaysmsVersionName") as String?) ?: "1.0.0-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Environment-aware network configuration. Release builds ship with no default server
@@ -59,6 +61,17 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // Null when keystore.properties is absent: the build then produces an unsigned APK.
             signingConfig = signingConfigs.findByName("release")
+        }
+        // The release build with one difference: it may talk cleartext to the local development
+        // host and is signed with the debug key. It exists to exercise the minified code on an
+        // emulator against a local relay (scripts/release-smoke.sh). Never distribute it.
+        create("staging") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".staging"
+            versionNameSuffix = "-staging"
+            signingConfig = signingConfigs.getByName("debug")
+            buildConfigField("boolean", "ALLOW_CLEARTEXT_LOCAL", "true")
+            matchingFallbacks += "release"
         }
         debug {
             applicationIdSuffix = ".debug"

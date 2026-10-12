@@ -147,7 +147,7 @@ describe('serverless mode', () => {
     const off = await harness();
     await request(off.app).get('/internal/cron/expire').expect(404);
 
-    const h = await harness({ CRON_SECRET: 'cron-secret-0123456789', MESSAGE_TTL_HOURS: '1' });
+    const h = await harness({ CRON_SECRET: 'Zx9-dummy-cron-secret-Zx9', MESSAGE_TTL_HOURS: '1' });
     const { source, companion } = await pairedDevices(h.app);
     await request(h.app)
       .post('/v1/messages')
@@ -158,14 +158,14 @@ describe('serverless mode', () => {
     await request(h.app).get('/internal/cron/expire').expect(404);
     await request(h.app)
       .get('/internal/cron/expire')
-      .set('Authorization', 'Bearer wrong-secret-0123456789')
+      .set('Authorization', 'Bearer Zx9-wrong-cron-secret-Zx9')
       .expect(404);
     const done = await request(h.app)
       .get('/internal/cron/expire')
-      .set('Authorization', 'Bearer cron-secret-0123456789')
+      .set('Authorization', 'Bearer Zx9-dummy-cron-secret-Zx9')
       .expect(200);
     expect(done.body.messages).toBeGreaterThanOrEqual(1);
-    expect(h.logs()).not.toContain('cron-secret-0123456789');
+    expect(h.logs()).not.toContain('Zx9-dummy-cron-secret-Zx9');
   });
 
   it('serves the API through the serverless entry point', async () => {
