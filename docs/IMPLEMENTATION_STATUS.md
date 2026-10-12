@@ -414,8 +414,8 @@ acceptance criteria need the server.
 
 ## Module 13 — Release builds and private installation
 
-- Status: `COMPLETED` for building and checking; **no release has been published yet** (the
-  release workflow needs the owner's signing secrets and runs when a version tag is pushed)
+- Status: `COMPLETED`; pre-release `v0.9.0` was published by the release workflow on 2026-10-13
+  (details under "Open items")
 - Created: version from Gradle properties (`relaysmsVersionName`, `relaysmsVersionCode`);
   `staging` build type (the minified release build, allowed to reach the local relay, debug
   signed, never distributed); `scripts/release-smoke.sh`; `PeerTool pair-source`;
@@ -481,7 +481,7 @@ acceptance criteria need the server.
 | --- | --- | --- |
 | Relay on Vercel | **Working** at `https://relaysms-theta.vercel.app` since 2026-10-13. Checked live: `/healthz` and `/readyz` 200, `/v1/info` reports poll mode, unauthenticated requests get 401, `scripts/relay-smoke.mjs` passed all 8 steps (register, pair, signed upload, duplicate, delivery, acknowledgement, device deletion). The build applied migrations 001–005. `/metrics` (aggregate counts only) is publicly reachable on Vercel; the scheduled clean-up has not run yet | Nothing. The team-scoped `…-projects.vercel.app` addresses are behind Vercel's login; phones must use the `relaysms-theta.vercel.app` address |
 | Supabase database | Schema `relaysms` created with 5 tables, row level security on all of them. `public` still has 14 tables and `pwma` 17, as before; `public.devices` is unchanged | Nothing |
-| GitHub release | **Not published.** Tag `v0.9.0` was pushed; the Release workflow run stopped at "Check that signing secrets exist" | Run `scripts/create-release-keystore.sh`, add the four `ANDROID_*` repository secrets, then re-run the failed workflow run. See `INSTALL.md` §6 |
+| GitHub release | **Published** on 2026-10-13: pre-release `v0.9.0` with `RelaySMS-0.9.0.apk` (3.2 MB) and its SHA-256 file. The Release workflow succeeded on its second attempt, after the four signing secrets were added. The downloaded APK matches its checksum, is signed by the release key (certificate SHA-256 `ffad97dd…601596`), version code 900, not debuggable. Not yet installed on any phone | Keep `android/relaysms-release.jks` and `android/keystore.properties` backed up; every later version must be signed with the same key |
 | Real-device validation | **Not performed.** No phone was attached at any point | Work through `TESTING.md` §4 on the source phone and the Galaxy S25 Ultra |
 
 ## Modules
@@ -500,6 +500,6 @@ acceptance criteria need the server.
 | 10 | Backend deployment and configuration | COMPLETED (container files not executed: no Docker on dev host) |
 | 11 | Automated testing and end-to-end validation | COMPLETED (emulator and JVM; real devices not tested) |
 | 12 | UX polish and accessibility | COMPLETED |
-| 13 | Release builds and private installation | COMPLETED (no release published yet) |
+| 13 | Release builds and private installation | COMPLETED (v0.9.0 pre-release published) |
 | 14 | Default SMS app support and remote sending | COMPLETED (emulator; S25 Ultra not tested) |
 | — | CI and quality gates | COMPLETED |
