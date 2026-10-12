@@ -6,7 +6,11 @@ import io.github.ammarqaisar11a55.relaysms.core.network.RelayApi
 import io.github.ammarqaisar11a55.relaysms.delivery.SendResult
 import io.github.ammarqaisar11a55.relaysms.sms.EventId
 import io.github.ammarqaisar11a55.relaysms.sms.IncomingSms
+import io.github.ammarqaisar11a55.relaysms.transport.RelaySocket
+import io.github.ammarqaisar11a55.relaysms.transport.SocketState
 import io.github.ammarqaisar11a55.relaysms.transport.SyncOutcome
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
@@ -159,6 +163,46 @@ class TransportIntegrationTest {
         assertEquals(SyncOutcome.COMPLETE, companion.sync.syncOnce())
         assertEquals(listOf(second), companion.received.values.toList())
         assertEquals(1, companion.sync.status.value.rejected)
+    }
+
+    @Test fun `the live channel connects with the device credential and delivers a content-free hint`(): Unit = runBlocking {
+        val source = TestPhone(DeviceRole.SOURCE); val companion = TestPhone(DeviceRole.COMPANION)
+        pair(source, companion)
+        val events = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
+        val socket = RelaySocket(companion.client, companion.store, scope, onEvent = { events += it }, onRejected = {})
+        try {
+            assertEquals(SocketState.STOPPED, socket.state.value)
+            socket.start()
+            withTimeout(15_000) { socket.state.first { it == SocketState.CONNECTED } }
+            assertTrue((source.link.refresh()).peerOnline)
+            source.forward(sms)
+            withTimeout(15_000) { while (RelaySocket.EVENT_MESSAGES !in events) kotlinx.coroutines.delay(50) }
+            assertEquals(RelaySocket.EVENT_CONNECTED, events.first())
+            // The hint carried nothing: the message is still only obtainable through sync.
+            assertTrue(companion.received.isEmpty())
+            assertEquals(SyncOutcome.COMPLETE, companion.sync.syncOnce())
+            assertEquals(listOf(sms), companion.received.values.toList())
+
+            // A restart of the app (same state, new socket object) reconnects on its own.
+            socket.stop()
+            assertEquals(SocketState.STOPPED, socket.state.value)
+            withTimeout(15_000) { while (source.link.refresh().peerOnline) kotlinx.coroutines.delay(100) }
+            socket.start()
+            withTimeout(15_000) { socket.state.first { it == SocketState.CONNECTED } }
+        } finally {
+            socket.stop()
+            scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+        }
+    }
+
+    @Test fun `a phone restored from saved state continues as the same device`(): Unit = runBlocking {
+        val source = TestPhone(DeviceRole.SOURCE); val companion = TestPhone(DeviceRole.COMPANION)
+        pair(source, companion)
+        source.forward(sms)
+        val revived = restoreTestPhone(companion.exportState())
+        assertEquals(SyncOutcome.COMPLETE, revived.sync.syncOnce())
+        assertEquals(listOf(sms), revived.received.values.toList())
     }
 
     @Test fun `a third device cannot read or inject messages of a pair`() = runBlocking {

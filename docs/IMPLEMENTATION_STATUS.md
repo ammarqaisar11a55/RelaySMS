@@ -256,7 +256,8 @@ acceptance criteria need the server.
 - Build: `:app:assembleDebug`, `:app:lintDebug` — PASS
 - Known issues: lock-screen behaviour was checked through the notification's visibility and
   public version, not by looking at a locked physical screen; Samsung One UI rendering untested
-- Commit message: `feat(notifications): add private message notifications and clipboard clearing`
+- Commit: `fc3c97d` — `feat(notifications): add private message notifications and clipboard clearing`
+- Push: SUCCESS
 
 ## Module 9 — Security hardening
 
@@ -289,6 +290,31 @@ acceptance criteria need the server.
   device records not garbage-collected). No penetration test, fuzzing or second-person review
 - Commit message (relay part): `feat(security): harden relay and add threat model`
 
+## Module 8 — Persistent connectivity and background reliability
+
+- Status: `COMPLETED` (emulator scope; Doze and vendor battery managers not testable on an emulator)
+- Created: `background/NetworkMonitor` (validated-network callback: reconnect at once and flush
+  both directions), `ConnectionService` (opt-in foreground service, type `remoteMessaging`,
+  truthful ongoing notification, "Turn off" action, sticky), `BootReceiver` (restart and app
+  update recovery), `BatteryOptimization` (state and link to the system screen; no exemption is
+  requested by the app), `RelaySocket.reconnectNow`, settings section "Background delivery",
+  inbox hint when the background connection is off; `docs/RELIABILITY.md` (delivery semantics,
+  what Android can still do, tested conditions, push considered and not included);
+  test tooling: persistable simulated phone, host-side `PeerTool`, `ReliabilityScenario` setup
+  steps, `scripts/emulator-reliability-check.sh`, Gradle task `writeUnitTestClasspath`
+- Foreground service justification: no push service is used, so without a held connection a code
+  would reach the companion only at the next periodic sync (15 minutes or more)
+- Acceptance: tested with sender screen off, companion screen off, temporary disconnection,
+  process termination and device restart; constraints recorded — met on the emulator
+- Tests: `emulator-reliability-check.sh` — source 7 checks, companion 8 checks — PASS (table in
+  `RELIABILITY.md`); Android JVM 94 with relay (adds live-channel connect/hint/reconnect and
+  restored-phone tests) — PASS; on-device 44 — PASS; relay 53 (`npm test`, includes the hardening
+  tests added in `d1a3b7e`, re-run here) — PASS
+- Build: `:app:assembleDebug`, `:app:lintDebug` — PASS
+- Known issues: with the background connection off, a closed companion app receives only at
+  Android's periodic sync; that path was not timed; real-device Doze behaviour is unverified
+- Commit message: `feat(background): keep delivery working in the background`
+
 ## Modules
 
 | # | Module | Status |
@@ -300,7 +326,7 @@ acceptance criteria need the server.
 | 5 | End-to-end encrypted message transport | COMPLETED |
 | 6 | Companion inbox and local storage | COMPLETED |
 | 7 | OTP detection, copying and notifications | COMPLETED |
-| 8 | Persistent connectivity and background reliability | NOT STARTED |
+| 8 | Persistent connectivity and background reliability | COMPLETED |
 | 9 | Security hardening | IN PROGRESS (relay and threat model done; Android pending) |
 | 10 | Backend deployment and configuration | COMPLETED (container files not executed: no Docker on dev host) |
 | 11 | Automated testing and end-to-end validation | NOT STARTED |

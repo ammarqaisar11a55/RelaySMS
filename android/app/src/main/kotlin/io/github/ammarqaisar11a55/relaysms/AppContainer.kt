@@ -3,6 +3,8 @@ package io.github.ammarqaisar11a55.relaysms
 import android.content.Context
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.preferencesDataStoreFile
+import io.github.ammarqaisar11a55.relaysms.background.ConnectionService
+import io.github.ammarqaisar11a55.relaysms.background.NetworkMonitor
 import io.github.ammarqaisar11a55.relaysms.core.common.SafeLog
 import io.github.ammarqaisar11a55.relaysms.core.database.AppDatabase
 import io.github.ammarqaisar11a55.relaysms.core.model.DeviceRole
@@ -96,6 +98,7 @@ class AppContainer(context: Context) {
      * anything still queued for the old companion is destroyed, so it can never reach a new one.
      */
     private suspend fun onPeerRemoved() {
+        ConnectionService.stop(appContext)
         preferences.setForwardingEnabled(false)
         withContext(Dispatchers.IO) { database.outboxDao().deletePending() }
         SafeLog.event("peer_removed")
@@ -166,10 +169,42 @@ class AppContainer(context: Context) {
         }
     }
 
+    @Volatile private var backgroundConnectionActive = false
+
+    /** The live connection is wanted while the app is on screen or the background service runs. */
+    private fun updateSocket() {
+        if (appInForeground || backgroundConnectionActive) relaySocket.start() else relaySocket.stop()
+    }
+
+    /** Called by [ConnectionService] when it starts and stops. */
+    fun setBackgroundConnection(active: Boolean) {
+        backgroundConnectionActive = active
+        updateSocket()
+    }
+
+    /** Starts the background connection service if the user enabled it and a device is paired. */
+    fun restoreBackgroundConnection() {
+        appScope.launch {
+            if (preferences.current().backgroundConnection && identityStore.peer.value != null) ConnectionService.start(appContext)
+        }
+    }
+
+    val networkMonitor: NetworkMonitor by lazy {
+        NetworkMonitor(appContext) {
+            // Network is back: reconnect without waiting out the backoff, and flush both directions.
+            relaySocket.reconnectNow()
+            appScope.launch {
+                runCatching { outboxDeliverer.runOnce() }
+                runCatching { relaySync.syncOnce() }
+            }
+        }
+    }
+
     fun onAppForeground() {
         appInForeground = true
         messageNotifier.clearAll()
-        relaySocket.start()
+        updateSocket()
+        restoreBackgroundConnection()
         appScope.launch {
             relaySync.syncOnce()
             outboxDeliverer.runOnce()
@@ -178,7 +213,7 @@ class AppContainer(context: Context) {
 
     fun onAppBackground() {
         appInForeground = false
-        relaySocket.stop()
+        updateSocket()
     }
 
     val outboxDeliverer: OutboxDeliverer by lazy { OutboxDeliverer(database.outboxDao(), { localCipher }, { outboxTransport }) }
@@ -206,6 +241,7 @@ class AppContainer(context: Context) {
 
     val resetCoordinator = ResetCoordinator().apply {
         register(ResetCoordinator.ORDER_STOP_ACTIVITY, "forwarding") { preferences.setForwardingEnabled(false) }
+        register(ResetCoordinator.ORDER_STOP_ACTIVITY + 1, "background connection") { ConnectionService.stop(appContext) }
         register(ResetCoordinator.ORDER_REVOKE_REMOTE, "relay registration") { linkMonitor.deleteRegistration() }
         register(ResetCoordinator.ORDER_DELETE_KEYS, "device keys") { deviceKeys.delete() }
         register(ResetCoordinator.ORDER_WIPE_STORAGE, "database") { withContext(Dispatchers.IO) { database.clearAllTables() } }
@@ -221,6 +257,7 @@ class AppContainer(context: Context) {
     /** Called once at process start: resume delivery of anything left in the queue. */
     fun onProcessStart() {
         startNotifying()
+        networkMonitor.start()
         appScope.launch(Dispatchers.IO) {
             // Touch Keystore-backed state off the main thread so the first screen does not wait for it.
             identityStore.identity.value

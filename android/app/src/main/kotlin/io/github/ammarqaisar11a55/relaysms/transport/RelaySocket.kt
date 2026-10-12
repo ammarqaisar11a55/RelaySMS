@@ -5,7 +5,8 @@ import io.github.ammarqaisar11a55.relaysms.pairing.IdentityStore
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -57,6 +58,12 @@ class RelaySocket(
     private val _state = MutableStateFlow(SocketState.STOPPED)
     val state: StateFlow<SocketState> = _state.asStateFlow()
     private var job: Job? = null
+    private val wake = Channel<Unit>(Channel.CONFLATED)
+
+    /** Skips the current reconnect delay, e.g. because the network just came back. */
+    fun reconnectNow() {
+        wake.trySend(Unit)
+    }
 
     @Synchronized
     fun start() {
@@ -112,7 +119,9 @@ class RelaySocket(
             }
             _state.value = SocketState.WAITING_TO_RETRY
             if (code == CLOSE_REVOKED) onRejected()
-            delay(backoff.next())
+            // Drop a stale wake-up, then wait for the backoff or for an explicit one.
+            wake.tryReceive()
+            withTimeoutOrNull(backoff.next()) { wake.receive() }
         }
     }
 

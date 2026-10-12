@@ -35,6 +35,8 @@ data class AppSettings(
     val notificationsEnabled: Boolean = true,
     /** Companion phone: show sender and text in notifications (not on a secure lock screen). Opt-in. */
     val notificationPreview: Boolean = false,
+    /** Keep the relay connection open with a foreground service while the app is not on screen. */
+    val backgroundConnection: Boolean = false,
 ) {
     val onboardingComplete: Boolean get() = role != null
 
@@ -71,6 +73,7 @@ class AppPreferences(private val store: DataStore<Preferences>) {
                 clipboardClearSeconds = (p[KEY_CLIPBOARD_CLEAR] ?: 60).coerceIn(0, 600),
                 notificationsEnabled = p[KEY_NOTIFICATIONS] ?: true,
                 notificationPreview = p[KEY_NOTIFICATION_PREVIEW] ?: false,
+                backgroundConnection = p[KEY_BACKGROUND_CONNECTION] ?: false,
             )
         }
 
@@ -93,6 +96,8 @@ class AppPreferences(private val store: DataStore<Preferences>) {
     suspend fun setAllowlistOnly(enabled: Boolean) = store.edit { it[KEY_ALLOWLIST_ONLY] = enabled }
 
     suspend fun setRetentionDays(days: Int) = store.edit { it[KEY_RETENTION_DAYS] = days }
+
+    suspend fun setBackgroundConnection(enabled: Boolean) = store.edit { it[KEY_BACKGROUND_CONNECTION] = enabled }
 
     suspend fun setNotificationsEnabled(enabled: Boolean) = store.edit { it[KEY_NOTIFICATIONS] = enabled }
 
@@ -129,6 +134,7 @@ class AppPreferences(private val store: DataStore<Preferences>) {
         val KEY_FORWARDING = booleanPreferencesKey("forwarding_enabled")
         val KEY_ALLOWLIST_ONLY = booleanPreferencesKey("allowlist_only")
         val KEY_RETENTION_DAYS = intPreferencesKey("retention_days")
+        val KEY_BACKGROUND_CONNECTION = booleanPreferencesKey("background_connection")
         val KEY_NOTIFICATIONS = booleanPreferencesKey("notifications_enabled")
         val KEY_NOTIFICATION_PREVIEW = booleanPreferencesKey("notification_preview")
         val KEY_CLIPBOARD_CLEAR = intPreferencesKey("clipboard_clear_seconds")

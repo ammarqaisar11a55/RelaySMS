@@ -42,5 +42,6 @@ for _ in $(seq 1 50); do
 done
 curl -fsS "http://127.0.0.1:$PORT/readyz" >/dev/null || { cat "$LOG"; echo "relay did not start" >&2; exit 1; }
 
+export RELAY_TEST_PID="$SERVER_PID"
 export RELAY_TEST_URL="http://127.0.0.1:$PORT" RELAY_TEST_PORT="$PORT" RELAY_TEST_DATABASE_URL="${DB_URL%/relaysms}/relaysms_it"
 "$@"

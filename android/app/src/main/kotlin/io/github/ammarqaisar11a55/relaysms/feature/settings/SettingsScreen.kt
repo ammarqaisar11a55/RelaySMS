@@ -16,6 +16,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.Switch
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import io.github.ammarqaisar11a55.relaysms.background.BatteryOptimization
+import io.github.ammarqaisar11a55.relaysms.background.ConnectionService
 import io.github.ammarqaisar11a55.relaysms.feature.home.openAppSettings
 import io.github.ammarqaisar11a55.relaysms.ui.components.InfoCard
 import androidx.compose.foundation.text.KeyboardOptions
@@ -130,6 +132,8 @@ fun SettingsScreen(
                 }
                 FullWidthButton("Delete all messages on this phone", onClick = { confirmDeleteAll = true }, outlined = true, modifier = Modifier.testTag("delete_all_messages"))
             }
+
+            BackgroundSettings(settings, paired = peer != null)
 
             if (settings.role == DeviceRole.COMPANION) {
                 NotificationSettings(settings)
@@ -248,6 +252,50 @@ fun SettingsScreen(
             },
         )
     }
+}
+
+@Composable
+private fun BackgroundSettings(settings: AppSettings, paired: Boolean) {
+    val container = LocalAppContainer.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var unrestricted by remember { mutableStateOf(BatteryOptimization.isUnrestricted(context)) }
+    LifecycleResumeEffect(Unit) {
+        unrestricted = BatteryOptimization.isUnrestricted(context)
+        onPauseOrDispose { }
+    }
+
+    SectionHeader("Background delivery")
+    if (settings.role == DeviceRole.COMPANION) {
+        SwitchRow(
+            title = "Stay connected in the background",
+            subtitle = "On: RelaySMS keeps a connection to your relay with an ongoing notification, so messages usually arrive within seconds. " +
+                "Off: when the app is closed, messages arrive at Android's next background sync, which can take 15 minutes or longer.",
+            checked = settings.backgroundConnection,
+            enabled = paired,
+            tag = "background_connection",
+            onChange = { on ->
+                scope.launch {
+                    container.preferences.setBackgroundConnection(on)
+                    if (on) ConnectionService.start(context) else ConnectionService.stop(context)
+                }
+            },
+        )
+    } else {
+        Text(
+            "The source phone needs no background connection: Android starts RelaySMS when an SMS arrives, and queued messages are sent as soon as a network is available.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+    StatusRow("Battery use", if (unrestricted) "Unrestricted" else "Optimised by Android", if (unrestricted) Tone.OK else Tone.NEUTRAL)
+    Text(
+        "Android can delay or pause background work to save battery, most of all after the phone has been still with the screen off for a long time. " +
+            "Setting RelaySMS to \"Unrestricted\" reduces these delays. On Samsung phones also check Settings → Battery → Background usage limits and keep RelaySMS out of \"Sleeping apps\". " +
+            "RelaySMS cannot guarantee instant delivery on every device.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    FullWidthButton("Open battery settings", onClick = { BatteryOptimization.openSettings(context) }, outlined = true, modifier = Modifier.testTag("battery_settings"))
 }
 
 @Composable

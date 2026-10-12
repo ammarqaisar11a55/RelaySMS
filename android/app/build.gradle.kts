@@ -118,3 +118,14 @@ dependencies {
     androidTestImplementation(libs.androidx.work.testing)
     androidTestImplementation(libs.kotlinx.coroutines.test)
 }
+
+// Writes the JVM test classpath to a file so that scripts can run the simulated peer phone
+// (src/test PeerTool) with plain `java`, without keeping Gradle in memory next to an emulator.
+afterEvaluate {
+    tasks.register("writeUnitTestClasspath") {
+        dependsOn("compileDebugUnitTestKotlin")
+        val testTask = tasks.named<Test>("testDebugUnitTest")
+        val out = layout.buildDirectory.file("unit-test-classpath.txt")
+        doLast { out.get().asFile.writeText(testTask.get().classpath.asPath) }
+    }
+}

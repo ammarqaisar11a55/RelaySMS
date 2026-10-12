@@ -3,7 +3,15 @@ package io.github.ammarqaisar11a55.relaysms
 import io.github.ammarqaisar11a55.relaysms.core.model.DeviceRole
 import io.github.ammarqaisar11a55.relaysms.core.network.RelayApi
 import io.github.ammarqaisar11a55.relaysms.core.security.CryptoSetup
+import com.google.crypto.tink.InsecureSecretKeyAccess
+import com.google.crypto.tink.KeysetHandle
+import com.google.crypto.tink.TinkProtoKeysetFormat
+import io.github.ammarqaisar11a55.relaysms.core.security.CryptoUtil
 import io.github.ammarqaisar11a55.relaysms.core.security.DeviceCrypto
+import io.github.ammarqaisar11a55.relaysms.core.security.TinkDeviceCrypto
+import io.github.ammarqaisar11a55.relaysms.pairing.Identity
+import io.github.ammarqaisar11a55.relaysms.pairing.Peer
+import kotlinx.serialization.Serializable
 import io.github.ammarqaisar11a55.relaysms.pairing.InMemoryIdentityStore
 import io.github.ammarqaisar11a55.relaysms.pairing.LinkMonitor
 import io.github.ammarqaisar11a55.relaysms.pairing.PairingActivity
@@ -28,9 +36,30 @@ import okhttp3.OkHttpClient
  * One simulated phone running the app's real protocol code: real keys, real HTTP client,
  * in-memory storage. Used as the "other phone" in integration and on-device tests.
  */
-class TestPhone(val role: DeviceRole, val client: OkHttpClient = RelayApi.newHttpClient()) {
-    val crypto: DeviceCrypto = CryptoSetup.generateInMemory()
+class TestPhone(
+    val role: DeviceRole,
+    val client: OkHttpClient = RelayApi.newHttpClient(),
+    private val hpkeKeyset: KeysetHandle = CryptoSetup.run { register(); KeysetHandle.generateNew(HPKE_PARAMETERS) },
+    private val signingKeyset: KeysetHandle = CryptoSetup.run { register(); KeysetHandle.generateNew(SIGNING_PARAMETERS) },
+) {
+    val crypto: DeviceCrypto = TinkDeviceCrypto(hpkeKeyset, signingKeyset)
     val store = InMemoryIdentityStore()
+
+    /**
+     * Everything needed to continue as this phone in another process: test keys, registration
+     * and peer. Test material only; real devices never export private keys.
+     */
+    fun exportState(): String = Json.encodeToString(
+        PhoneState.serializer(),
+        PhoneState(
+            role.wireName,
+            CryptoUtil.b64(TinkProtoKeysetFormat.serializeKeyset(hpkeKeyset, InsecureSecretKeyAccess.get())),
+            CryptoUtil.b64(TinkProtoKeysetFormat.serializeKeyset(signingKeyset, InsecureSecretKeyAccess.get())),
+            store.identity.value,
+            store.peer.value,
+        ),
+    )
+
     var peerRemovedCount = 0
     val apiFactory: (String, String?) -> RelayApi = { url, token -> RelayApi(client, url, token) }
 
@@ -67,6 +96,23 @@ class TestPhone(val role: DeviceRole, val client: OkHttpClient = RelayApi.newHtt
     /** Forwards one SMS exactly as the source app does: stable id, JSON body, seal, upload. */
     suspend fun forward(sms: IncomingSms): SendResult =
         transport.send(EventId.of(sms), EnvelopeKind.SMS, Json.encodeToString(IncomingSms.serializer(), sms).toByteArray())
+}
+
+@Serializable
+data class PhoneState(val role: String, val hpkeKeyset: String, val signingKeyset: String, val identity: Identity?, val peer: Peer?)
+
+/** Rebuilds a phone from [TestPhone.exportState]. [rewriteUrl] adapts the relay address to this host. */
+suspend fun restoreTestPhone(json: String, rewriteUrl: (String) -> String = { it }): TestPhone {
+    CryptoSetup.register()
+    val state = Json.decodeFromString(PhoneState.serializer(), json)
+    val phone = TestPhone(
+        DeviceRole.fromWireName(state.role)!!,
+        hpkeKeyset = TinkProtoKeysetFormat.parseKeyset(CryptoUtil.unb64(state.hpkeKeyset), InsecureSecretKeyAccess.get()),
+        signingKeyset = TinkProtoKeysetFormat.parseKeyset(CryptoUtil.unb64(state.signingKeyset), InsecureSecretKeyAccess.get()),
+    )
+    phone.store.setIdentity(state.identity?.let { it.copy(serverUrl = rewriteUrl(it.serverUrl)) })
+    phone.store.setPeer(state.peer)
+    return phone
 }
 
 suspend inline fun <reified T : PairingState> PairingManager.await(): T =

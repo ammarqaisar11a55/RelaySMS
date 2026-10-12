@@ -150,6 +150,14 @@ fun InboxScreen(
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             ConnectionBar(summary, onClick = { if (peer == null) onOpenPairing() else onOpenDevice() })
+            if (peer != null && !settings.backgroundConnection) {
+                Text(
+                    "Messages arrive right away only while RelaySMS is open. Turn on \"Stay connected in the background\" in Settings to receive them when it is closed.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp).testTag("background_hint"),
+                )
+            }
             if (searching) SearchField(query, vm::setQuery)
             val ready = state as? InboxUiState.Ready
             if (ready != null && ready.total > 0) FilterRow(ready, vm::setFilter)
