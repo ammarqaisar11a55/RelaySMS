@@ -495,6 +495,22 @@ acceptance criteria need the server.
   fail
 - On-device suite after the fix: 64 — PASS
 
+## Reports from the owner's phones after v0.9.1 (2026-10-13)
+
+- **Cannot set RelaySMS as default SMS app (S25).** Not reproduced as an app defect: with the
+  published 0.9.1 APK on the Android 15 emulator, the in-app request opens Android's dialog,
+  RelaySMS is listed and the role is granted. With the file-install restriction simulated, Android
+  itself refuses with "App was denied access to be default SMS app", from the app and from the
+  system's Default apps screen. Advice given: App info → ⋮ → Allow restricted settings (and Samsung
+  Auto Blocker). Outcome on the S25 not yet reported
+- **Notifications not shown (companion).** Cause confirmed on the emulator: without Android's
+  notification permission a message is delivered and stored but no notification is posted, and
+  the only place the app asked for that permission was a button inside Settings. Fixed in v0.9.2:
+  the inbox shows "Notifications are blocked" with an "Allow notifications" button whenever the
+  phone is paired, notifications are wanted and Android is blocking them. Verified on the emulator
+  (card shown, Android prompt, card gone, next background message notified). No automated test
+  was added for this card
+
 ## Open items that need the owner (as of 2026-10-13)
 
 | Item | State | What is needed |

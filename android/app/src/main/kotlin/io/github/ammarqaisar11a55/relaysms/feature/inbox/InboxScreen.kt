@@ -1,6 +1,14 @@
 package io.github.ammarqaisar11a55.relaysms.feature.inbox
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.platform.LocalContext
+import io.github.ammarqaisar11a55.relaysms.feature.home.openAppSettings
+import io.github.ammarqaisar11a55.relaysms.ui.components.FullWidthButton
+import io.github.ammarqaisar11a55.relaysms.ui.components.InfoCard
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -109,7 +117,17 @@ fun InboxScreen(
             delay(30_000)
         }
     }
+    // Android 13+ only shows notifications after the user allowed them. Without this check a
+    // paired companion would receive messages in silence and never be told why.
+    val context = LocalContext.current
+    var canNotify by remember { mutableStateOf(container.messageNotifier.canPost()) }
+    var notifyDenied by rememberSaveable { mutableStateOf(false) }
+    val notifyLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        canNotify = container.messageNotifier.canPost()
+        notifyDenied = !granted
+    }
     LifecycleResumeEffect(Unit) {
+        canNotify = container.messageNotifier.canPost()
         val job = container.appScope.launch { container.linkMonitor.refresh() }
         onPauseOrDispose { job.cancel() }
     }
@@ -160,6 +178,23 @@ fun InboxScreen(
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             ConnectionBar(summary, onClick = { if (peer == null) onOpenPairing() else onOpenDevice() })
+            if (peer != null && settings.notificationsEnabled && !canNotify) {
+                val canAsk = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notifyDenied
+                InfoCard(
+                    title = "Notifications are blocked",
+                    body = if (canAsk) "Android is not letting RelaySMS show notifications, so new messages arrive silently. Allow notifications to be told when a message comes in. They say only \"New message received\" unless you choose otherwise."
+                    else "Android is not letting RelaySMS show notifications. Open App info, tap Notifications and allow them.",
+                    tone = Tone.WARN,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("notifications_prompt"),
+                    action = {
+                        FullWidthButton(
+                            if (canAsk) "Allow notifications" else "Open App info",
+                            onClick = { if (canAsk) notifyLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) else openAppSettings(context) },
+                            modifier = Modifier.testTag("notifications_prompt_allow"),
+                        )
+                    },
+                )
+            }
             if (peer != null && !settings.backgroundConnection) {
                 Text(
                     "Messages arrive right away only while RelaySMS is open. Turn on \"Stay connected in the background\" in Settings to receive them when it is closed.",
