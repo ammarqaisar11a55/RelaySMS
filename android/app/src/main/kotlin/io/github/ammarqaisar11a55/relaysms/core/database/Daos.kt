@@ -79,3 +79,64 @@ interface SeenSenderDao {
     @Query("DELETE FROM seen_senders")
     suspend fun deleteAll()
 }
+
+@Dao
+interface MessageDao {
+    /** @return row id, or -1 when a message (or its tombstone) with this id already exists. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIfAbsent(message: MessageEntity): Long
+
+    @Query("SELECT * FROM messages WHERE deleted_at IS NULL ORDER BY received_at DESC, id DESC")
+    fun observeAll(): Flow<List<MessageEntity>>
+
+    @Query("SELECT * FROM messages WHERE id = :id AND deleted_at IS NULL")
+    fun observe(id: String): Flow<MessageEntity?>
+
+    @Query("SELECT * FROM messages WHERE id = :id")
+    suspend fun find(id: String): MessageEntity?
+
+    @Query("SELECT COUNT(*) FROM messages WHERE deleted_at IS NULL")
+    suspend fun count(): Int
+
+    @Query("SELECT COUNT(*) FROM messages WHERE deleted_at IS NULL AND is_read = 0 AND direction = 0")
+    fun observeUnreadCount(): Flow<Int>
+
+    @Query("UPDATE messages SET is_read = :read WHERE id = :id")
+    suspend fun setRead(id: String, read: Boolean)
+
+    @Query("UPDATE messages SET is_read = 1 WHERE is_read = 0 AND deleted_at IS NULL")
+    suspend fun markAllRead()
+
+    @Query("UPDATE messages SET status = :status WHERE id = :id")
+    suspend fun setStatus(id: String, status: String)
+
+    @Query("UPDATE messages SET provider_id = :providerId WHERE id = :id")
+    suspend fun setProviderId(id: String, providerId: Long?)
+
+    /** Erases the content and leaves a tombstone. */
+    @Query("UPDATE messages SET address_enc = NULL, body_enc = NULL, deleted_at = :now WHERE id = :id AND deleted_at IS NULL")
+    suspend fun tombstone(id: String, now: Long)
+
+    @Query("UPDATE messages SET address_enc = NULL, body_enc = NULL, deleted_at = :now WHERE deleted_at IS NULL")
+    suspend fun tombstoneAll(now: Long)
+
+    @Query("UPDATE messages SET address_enc = NULL, body_enc = NULL, deleted_at = :now WHERE deleted_at IS NULL AND received_at < :cutoff")
+    suspend fun tombstoneOlderThan(cutoff: Long, now: Long): Int
+
+    @Query("SELECT id, provider_id FROM messages WHERE deleted_at IS NULL AND received_at < :cutoff AND provider_id IS NOT NULL")
+    suspend fun providerIdsOlderThan(cutoff: Long): List<ProviderRef>
+
+    @Query("SELECT id, provider_id FROM messages WHERE deleted_at IS NULL AND provider_id IS NOT NULL")
+    suspend fun allProviderIds(): List<ProviderRef>
+
+    @Query("SELECT * FROM messages WHERE deleted_at IS NULL AND provider_id IS NULL ORDER BY received_at ASC LIMIT :limit")
+    suspend fun withoutProviderId(limit: Int): List<MessageEntity>
+
+    @Query("UPDATE messages SET provider_id = NULL")
+    suspend fun clearProviderIds()
+
+    @Query("DELETE FROM messages WHERE deleted_at IS NOT NULL AND deleted_at < :cutoff")
+    suspend fun purgeTombstonesOlderThan(cutoff: Long): Int
+}
+
+data class ProviderRef(val id: String, @androidx.room.ColumnInfo(name = "provider_id") val providerId: Long?)

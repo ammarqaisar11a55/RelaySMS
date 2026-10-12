@@ -61,3 +61,57 @@ data class SeenSenderEntity(
     override fun equals(other: Any?): Boolean = other is SeenSenderEntity && other.senderKey == senderKey && other.count == count
     override fun hashCode(): Int = senderKey.hashCode()
 }
+
+object MessageDirection {
+    const val INCOMING = 0
+    const val OUTGOING = 1
+}
+
+object MessageOrigin {
+    /** Forwarded from the paired source phone through the relay. */
+    const val RELAY = "relay"
+
+    /** Received or sent by this phone's own SIM while RelaySMS is the default SMS app. */
+    const val SIM = "sim"
+}
+
+object MessageStatus {
+    const val RECEIVED = "received"
+    const val PENDING = "pending"
+    const val SENT = "sent"
+    const val FAILED = "failed"
+}
+
+/**
+ * One message in RelaySMS's own inbox. [addressEnc] and [bodyEnc] are encrypted with the
+ * device-local key and are null once the message is deleted; the remaining row is a content-free
+ * tombstone that stops a re-delivered copy from reappearing.
+ */
+@Entity(
+    tableName = "messages",
+    indices = [Index("received_at"), Index("address_key", "received_at"), Index("deleted_at")],
+)
+data class MessageEntity(
+    @PrimaryKey val id: String,
+    @ColumnInfo(name = "address_enc", typeAffinity = ColumnInfo.BLOB) val addressEnc: ByteArray?,
+    @ColumnInfo(name = "body_enc", typeAffinity = ColumnInfo.BLOB) val bodyEnc: ByteArray?,
+    /** SHA-256 of the normalised address: groups a conversation without revealing the address. */
+    @ColumnInfo(name = "address_key") val addressKey: String,
+    /** When the SMS reached the SIM (incoming) or was composed (outgoing). */
+    @ColumnInfo(name = "received_at") val receivedAt: Long,
+    @ColumnInfo(name = "stored_at") val storedAt: Long,
+    val direction: Int,
+    val origin: String,
+    val status: String,
+    @ColumnInfo(name = "is_read") val isRead: Boolean,
+    @ColumnInfo(name = "has_otp") val hasOtp: Boolean,
+    @ColumnInfo(name = "part_count") val partCount: Int,
+    @ColumnInfo(name = "subscription_id") val subscriptionId: Int,
+    /** Row id in the system SMS provider when mirrored there, else null. */
+    @ColumnInfo(name = "provider_id") val providerId: Long?,
+    @ColumnInfo(name = "deleted_at") val deletedAt: Long?,
+) {
+    override fun equals(other: Any?): Boolean = other is MessageEntity && other.id == id && other.isRead == isRead &&
+        other.status == status && other.deletedAt == deletedAt && other.providerId == providerId
+    override fun hashCode(): Int = id.hashCode()
+}

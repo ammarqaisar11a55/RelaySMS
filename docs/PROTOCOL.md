@@ -113,7 +113,7 @@ JSON, UTF-8:
 `kind` selects the body type. `kind = "sms"`:
 
 ```json
-{ "sender": "TESTBANK", "text": "...", "receivedAt": 1791810990000, "parts": 1, "subscriptionId": -1 }
+{ "sender": "TESTBANK", "body": "...", "receivedAtMillis": 1791810990000, "partCount": 1, "subscriptionId": -1 }
 ```
 
 Unknown versions and kinds are rejected by the receiver.

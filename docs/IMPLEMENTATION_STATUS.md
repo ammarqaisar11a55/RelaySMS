@@ -111,7 +111,40 @@ acceptance criteria need the server.
   using a handle to the deleted local key, so a pairing made before the next restart would have
   been lost at restart; (2) HTTP response bodies were read on the calling (main) thread
 - Known issues: pairing status is polled every 2 s while the pairing screen is open
-- Commit message: `feat(security): implement device pairing`
+- Commit: `4260647` — `feat(security): implement device pairing`
+- Push: SUCCESS
+
+## Module 5 — End-to-end encrypted message transport
+
+- Status: `COMPLETED` (emulator + JVM scope; no real carrier SMS or physical phones yet)
+- Created: `transport/MessageCodec` (versioned envelope, HPKE seal/open bound to sender,
+  recipient and message id, Ed25519 signature, strict validation), `RelayOutboxTransport`
+  (source upload), `RelaySync` (fetch, verify, decrypt, store, then acknowledge), `RelaySocket`
+  (authenticated WebSocket hints, exponential backoff with jitter), `EnvelopeRouter`;
+  `inbox/InboxRepository` with field-level encryption; Room v2 (`messages`) with
+  `MIGRATION_1_2`; `SyncWorker` (expedited one-time + 15-minute periodic); immediate delivery
+  attempt while the process is alive in addition to WorkManager; foreground lifecycle hook
+- Delivery policy: the source keeps an item until the relay accepts it, then keeps a content-free
+  tombstone for 7 days; the relay keeps ciphertext until acknowledged or 72 h; the companion
+  acknowledges only after the database commit; unverifiable messages are dropped and counted
+- Acceptance: controlled SMS reaches the companion inbox with the same sender, body and
+  timestamp; ciphertext only on and through the relay; transient disconnection retries instead
+  of losing; repeated delivery creates no duplicate entry — all met
+- Tests: Android JVM 70 (adds `MessageCodecTest` x9, `TransportIntegrationTest` x10 against a
+  real relay: lost acknowledgement, storage failure, offline queueing across pages, unreachable
+  relay, revocation, relay-altered ciphertext, cross-pair injection) — PASS; on-device 28
+  (`MigrationTest`, `InboxRepositoryTest` x7, `TransportOnDeviceTest` incl. live WebSocket hint)
+  — PASS; `scripts/emulator-forward-check.sh` (three SMS injected into the emulator modem, two
+  allowed ones arrive decrypted at the companion, filtered one does not, no plaintext in relay
+  database or app log) — PASS; `emulator-sms-check.sh` — PASS
+- Build: `:app:assembleDebug`, `:app:lintDebug` — PASS
+- Defects found by these tests and fixed in this module: (1) a link check triggered by the
+  relay's own "link changed" hint could run between link creation and the phone storing its peer
+  and revoke the brand-new pairing; (2) the same check compared the relay's answer with a peer
+  snapshot taken before the request; both now tolerate an overlapping pairing
+- Known issues: the companion home shows a plain list until Module 6; the live connection is
+  held only while the app is in the foreground until Module 8
+- Commit message: `feat(transport): deliver end-to-end encrypted messages`
 
 ## Modules
 
@@ -121,7 +154,7 @@ acceptance criteria need the server.
 | 2 | SMS reception and sender permissions | COMPLETED |
 | 3 | Device identity and secure pairing | COMPLETED |
 | 4 | Node.js/TypeScript relay backend | COMPLETED |
-| 5 | End-to-end encrypted message transport | NOT STARTED |
+| 5 | End-to-end encrypted message transport | COMPLETED |
 | 6 | Companion inbox and local storage | NOT STARTED |
 | 7 | OTP detection, copying and notifications | NOT STARTED |
 | 8 | Persistent connectivity and background reliability | NOT STARTED |

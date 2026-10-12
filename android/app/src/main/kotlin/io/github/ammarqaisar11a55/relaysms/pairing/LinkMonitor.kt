@@ -36,10 +36,36 @@ data class LinkStatus(
  * Keeps the locally stored pairing consistent with the relay and performs revocation. The relay
  * is the authority on whether a link exists; this phone is the authority on which keys it trusts.
  */
+/**
+ * Counts pairing sessions that are under way on this phone. While one is running the relay may
+ * already hold a link that this phone has not finished verifying and storing; the monitor must
+ * not mistake that for an unverified peer.
+ */
+class PairingActivity {
+    private val active = java.util.concurrent.atomic.AtomicInteger(0)
+    private val changes = java.util.concurrent.atomic.AtomicLong(0)
+
+    fun enter() {
+        active.incrementAndGet()
+        changes.incrementAndGet()
+    }
+
+    fun exit() {
+        active.updateAndGet { (it - 1).coerceAtLeast(0) }
+        changes.incrementAndGet()
+    }
+
+    val inProgress: Boolean get() = active.get() > 0
+
+    /** Changes whenever a pairing starts or ends; lets a caller detect one that overlapped its work. */
+    val epoch: Long get() = changes.get()
+}
+
 class LinkMonitor(
     private val store: IdentityStore,
     private val api: (baseUrl: String, token: String?) -> RelayApi,
     private val onPeerRemoved: suspend () -> Unit,
+    private val pairingActivity: PairingActivity = PairingActivity(),
     private val now: () -> Long = System::currentTimeMillis,
 ) {
     private val _status = MutableStateFlow(LinkStatus(if (store.peer.value != null) LinkState.PAIRED_UNCONFIRMED else LinkState.NOT_PAIRED))
@@ -58,13 +84,19 @@ class LinkMonitor(
     /** Asks the relay for the current link and reconciles local state with the answer. */
     suspend fun refresh(): LinkStatus = mutex.withLock {
         val identity = store.identity.value
-        val local = store.peer.value
+        val epochBefore = pairingActivity.epoch
         if (identity == null) {
+            val local = store.peer.value
             if (local != null) dropPeer(revoked = false)
             if (_status.value.state != LinkState.REVOKED) _status.value = LinkStatus(LinkState.NOT_PAIRED)
             return@withLock _status.value
         }
-        when (val me = apiFor(identity).me()) {
+        val me = apiFor(identity).me()
+        // Read local state only now: a pairing may have finished while the request was in flight,
+        // and comparing the relay's answer with an older snapshot would look like a mismatch.
+        val local = store.peer.value
+        val pairingOverlapped = pairingActivity.inProgress || pairingActivity.epoch != epochBefore
+        when (me) {
             ApiResult.Unreachable ->
                 _status.value = _status.value.copy(state = if (local != null) LinkState.PAIRED_UNCONFIRMED else _status.value.state.takeIf { it == LinkState.REVOKED } ?: LinkState.NOT_PAIRED, peerOnline = false)
             is ApiResult.Error -> if (me.status == 401) {
@@ -76,10 +108,14 @@ class LinkMonitor(
             }
             is ApiResult.Ok -> {
                 val remote = me.value.peer
+                val differs = remote != null && (local == null || remote.deviceId != local.deviceId ||
+                    remote.hpkePublicKey != local.hpkePublicKey || remote.signingPublicKey != local.signingPublicKey)
                 when {
+                    // A pairing is being completed, or was while we asked: the relay and this
+                    // phone are momentarily out of step. Change nothing; the next check settles it.
+                    pairingOverlapped && (differs || (remote == null && local != null)) -> Unit
                     remote == null -> if (local != null) dropPeer(revoked = true) else if (_status.value.state != LinkState.REVOKED) _status.value = LinkStatus(LinkState.NOT_PAIRED, confirmedAtMillis = now())
-                    local == null || remote.deviceId != local.deviceId ||
-                        remote.hpkePublicKey != local.hpkePublicKey || remote.signingPublicKey != local.signingPublicKey -> {
+                    differs || local == null -> {
                         // The relay names a peer whose keys this phone never verified. Never adopt
                         // keys from the relay: remove the link on both sides instead.
                         apiFor(identity).revokeLink()

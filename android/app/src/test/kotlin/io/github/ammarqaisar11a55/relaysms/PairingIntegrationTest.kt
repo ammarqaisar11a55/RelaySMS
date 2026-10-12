@@ -173,6 +173,40 @@ class PairingIntegrationTest {
         assertTrue((source.api.pendingMessages() as ApiResult.Ok).value.messages.isEmpty())
     }
 
+    @Test fun `link checks that run in the middle of pairing do not destroy the new link`() = runBlocking {
+        // Regression: the relay announces the new link as soon as both sides confirm, a moment
+        // before each phone has stored its peer. A link check in that window used to conclude
+        // "unverified peer" and revoke the link that was just created.
+        val source = TestPhone(DeviceRole.SOURCE)
+        val companion = TestPhone(DeviceRole.COMPANION)
+        val job = launch { companion.pairing.startAsCompanion(relayTestUrl, null) }
+        val qr = companion.pairing.await<PairingState.ShowingCode>().qrText
+        lastPairingId = PairingProtocol.decodeQr(qr, true)!!.pairingId
+        source.pairing.reviewScanned(qr)
+        source.pairing.redeemAsSource(null)
+        companion.pairing.await<PairingState.Verify>(); job.join()
+        // Complete the link on the relay behind the managers' backs, as the real server does
+        // between a phone's confirm call and its next poll.
+        assertTrue(source.api.confirmPairing(pairingIdOf(source)) is ApiResult.Ok)
+        assertTrue(companion.api.confirmPairing(pairingIdOf(source)) is ApiResult.Ok)
+        assertNotNull((source.api.me() as ApiResult.Ok).value.peer)
+        assertNull(source.store.peer.value)
+        source.link.refresh(); companion.link.refresh()
+        assertNotNull("the fresh link must survive a concurrent check", (source.api.me() as ApiResult.Ok).value.peer)
+
+        val a = launch { source.pairing.confirm() }
+        val b = launch { companion.pairing.confirm() }
+        a.join(); b.join()
+        source.pairing.await<PairingState.Completed>()
+        assertEquals(LinkState.PAIRED, source.link.refresh().state)
+        assertEquals(LinkState.PAIRED, companion.link.refresh().state)
+    }
+
+    @Suppress("UNUSED_PARAMETER")
+    private fun pairingIdOf(source: TestPhone): String = lastPairingId
+
+    private var lastPairingId = ""
+
     @Test fun `the relay never adopts a peer this phone did not verify`() = runBlocking {
         val source = TestPhone(DeviceRole.SOURCE)
         val companion = TestPhone(DeviceRole.COMPANION)

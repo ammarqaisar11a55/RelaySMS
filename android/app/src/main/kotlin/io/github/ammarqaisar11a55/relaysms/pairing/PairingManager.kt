@@ -72,6 +72,7 @@ class PairingManager(
     private val now: () -> Long = System::currentTimeMillis,
     private val pollIntervalMs: Long = 2_000,
     private val random: SecureRandom = SecureRandom(),
+    private val activity: PairingActivity = PairingActivity(),
 ) {
     private val _state = MutableStateFlow<PairingState>(PairingState.Idle)
     val state: StateFlow<PairingState> = _state.asStateFlow()
@@ -87,16 +88,27 @@ class PairingManager(
 
     private var session: Session? = null
     private var scanned: QrPayload? = null
+    private var counted = false
+
+    /** Marks this manager as busy from the first network step until it completes or fails. */
+    @Synchronized
+    private fun setBusy(busy: Boolean) {
+        if (busy == counted) return
+        counted = busy
+        if (busy) activity.enter() else activity.exit()
+    }
 
     fun reset() {
         session = null
         scanned = null
         _state.value = PairingState.Idle
+        setBusy(false)
     }
 
     private fun fail(reason: PairingFailure) {
         session = null
         _state.value = PairingState.Failed(reason)
+        setBusy(false)
     }
 
     private fun failureFor(error: ApiResult.Error): PairingFailure = when (error.code) {
@@ -161,6 +173,7 @@ class PairingManager(
         check(role == DeviceRole.COMPANION)
         val url = (ServerUrl.parse(serverUrlInput, allowCleartextLocal) as? ServerUrl.Result.Valid)?.url
             ?: return fail(PairingFailure.INVALID_CODE)
+        setBusy(true)
         _state.value = PairingState.Working("Contacting the relay")
         val reg = when (val r = ensureRegistered(url, registrationCode)) {
             is Registered.Ok -> r
@@ -235,6 +248,7 @@ class PairingManager(
     suspend fun redeemAsSource(registrationCode: String?) {
         check(role == DeviceRole.SOURCE)
         val payload = scanned ?: return fail(PairingFailure.INVALID_CODE)
+        setBusy(true)
         _state.value = PairingState.Working("Contacting the relay")
         val reg = when (val r = ensureRegistered(payload.serverUrl, registrationCode)) {
             is Registered.Ok -> r
@@ -280,6 +294,8 @@ class PairingManager(
                         store.setPeer(Peer(peer.deviceId, peer.hpkePublicKey, peer.signingPublicKey, now(), s.safetyCode))
                         session = null
                         _state.value = PairingState.Completed(fingerprint)
+                        // Only now, with the peer stored, may the monitor reconcile again.
+                        setBusy(false)
                         return
                     }
                     "redeemed" -> Unit
@@ -300,6 +316,7 @@ class PairingManager(
         session = null
         scanned = null
         _state.value = PairingState.Failed(PairingFailure.CANCELLED)
+        setBusy(false)
         s?.api?.cancelPairing(s.pairingId)
     }
 

@@ -6,6 +6,8 @@ import io.github.ammarqaisar11a55.relaysms.core.database.OutboxState
 import io.github.ammarqaisar11a55.relaysms.core.security.FieldCipher
 import io.github.ammarqaisar11a55.relaysms.sms.IncomingSmsProcessor
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** Result of handing one queued item to the relay. */
 enum class SendResult {
@@ -39,7 +41,12 @@ class OutboxDeliverer(
     private val transport: () -> OutboxTransport,
     private val now: () -> Long = System::currentTimeMillis,
 ) {
-    suspend fun runOnce(): DeliveryRun {
+    private val mutex = Mutex()
+
+    /** Runs are serialised; a second caller waits and then picks up anything queued meanwhile. */
+    suspend fun runOnce(): DeliveryRun = mutex.withLock { drain() }
+
+    private suspend fun drain(): DeliveryRun {
         val t = now()
         dao.expirePendingOlderThan(cutoff = t - PENDING_TTL_MS, now = t)
         dao.deleteTombstonesOlderThan(t - TOMBSTONE_TTL_MS)

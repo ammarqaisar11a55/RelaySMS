@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.ammarqaisar11a55.relaysms.feature.pairing.formatTime
 import io.github.ammarqaisar11a55.relaysms.feature.pairing.label
 import io.github.ammarqaisar11a55.relaysms.pairing.LinkState
 import io.github.ammarqaisar11a55.relaysms.ui.components.FullWidthButton
@@ -65,6 +66,11 @@ fun CompanionHomeScreen(onOpenSettings: () -> Unit, onOpenPairing: () -> Unit, o
             val (label, tone) = status.label()
             StatusRow("Source phone", label, tone)
             if (peer != null) FullWidthButton("Paired device", onClick = onOpenDevice, outlined = true, modifier = Modifier.testTag("open_device"))
+            val messages by container.inboxRepository.messages.collectAsStateWithLifecycle(emptyList())
+            SectionHeader("Messages (${messages.size})")
+            for (m in messages.take(50)) {
+                InfoCard(title = m.address, body = m.body + "\n" + formatTime(m.receivedAtMillis), modifier = Modifier.testTag("message_${m.id}"))
+            }
         }
     }
 }

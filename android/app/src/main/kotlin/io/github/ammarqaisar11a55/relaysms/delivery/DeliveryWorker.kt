@@ -1,9 +1,6 @@
 package io.github.ammarqaisar11a55.relaysms.delivery
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.content.Context
-import androidx.core.app.NotificationCompat
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -14,7 +11,6 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import io.github.ammarqaisar11a55.relaysms.R
 import io.github.ammarqaisar11a55.relaysms.RelaySmsApp
 import io.github.ammarqaisar11a55.relaysms.core.common.SafeLog
 import java.util.concurrent.TimeUnit
@@ -35,22 +31,10 @@ class DeliveryWorker(context: Context, params: WorkerParameters) : CoroutineWork
         }
     }
 
-    /** Only used on Android 11 and older, where expedited work runs as a foreground service. */
-    override suspend fun getForegroundInfo(): ForegroundInfo {
-        val manager = applicationContext.getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Message delivery", NotificationManager.IMPORTANCE_LOW))
-        val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_relay)
-            .setContentTitle("Forwarding messages")
-            .setOngoing(true)
-            .build()
-        return ForegroundInfo(NOTIFICATION_ID, notification)
-    }
+    override suspend fun getForegroundInfo(): ForegroundInfo = workForegroundInfo(applicationContext, "Forwarding messages")
 
     companion object {
         private const val UNIQUE_NAME = "outbox-delivery"
-        private const val CHANNEL_ID = "delivery"
-        private const val NOTIFICATION_ID = 1001
 
         /**
          * Requests a delivery run as soon as a network is available. If a run is already queued
