@@ -585,6 +585,16 @@ private fun NotificationSettings(settings: AppSettings) {
         tag = "notification_preview",
         onChange = { scope.launch { container.preferences.setNotificationPreview(it) } },
     )
+    SwitchRow(
+        title = "\"Copy code\" button on notifications",
+        subtitle = if (settings.appLock) "Unavailable while \"Lock RelaySMS\" is on: codes can then be copied only inside the app."
+        else "When a message carries a verification code, its notification gets a button that copies the code so you can paste it into the other app. " +
+            "Other apps cannot read forwarded codes by themselves: Android only lets them auto-read SMS that arrive on this phone's own SIM.",
+        checked = settings.notificationCopyCode && !settings.appLock,
+        enabled = settings.notificationsEnabled && !settings.appLock,
+        tag = "notification_copy_code",
+        onChange = { scope.launch { container.preferences.setNotificationCopyCode(it) } },
+    )
     if (settings.notificationsEnabled && !canPost) {
         InfoCard(
             title = "Android is blocking notifications",

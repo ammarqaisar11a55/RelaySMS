@@ -511,6 +511,21 @@ acceptance criteria need the server.
   (card shown, Android prompt, card gone, next background message notified). No automated test
   was added for this card
 
+- **Other apps do not pick up the code automatically (companion).** Not a defect and not
+  fixable by an app: Android lets other apps auto-read codes only from SMS that arrive through
+  the phone's own modem (the protected `SMS_RECEIVED` broadcast, and Google's SMS Retriever and
+  User Consent APIs built on it). A forwarded message arrives over the internet; no app may
+  send that broadcast, even as default SMS app. Mitigation added in v0.9.3: a "Copy code" button
+  on the notification of a message that carries a code (on by default, off while the app lock
+  is on, hidden on a secure lock screen, the notification holds the message id and not the code).
+  Apps that verify the SIM inside the phone itself cannot be satisfied by any forwarding
+- **Crash found while testing v0.9.3:** stopping the background-connection service right after
+  starting it killed the app with `ForegroundServiceDidNotStartInTimeException` (for example
+  flipping "Stay connected" on and off quickly, or a revocation arriving as the app opens).
+  Fixed: the service always enters the foreground first and is then asked to stop itself.
+  `ConnectionServiceTest` x2, `CopyCodeNotificationTest` x4; on-device suite 70 — PASS;
+  companion reliability scenario 8/8 — PASS
+
 ## Open items that need the owner (as of 2026-10-13)
 
 | Item | State | What is needed |

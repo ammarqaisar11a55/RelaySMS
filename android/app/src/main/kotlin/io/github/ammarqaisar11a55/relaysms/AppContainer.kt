@@ -268,7 +268,10 @@ class AppContainer(context: Context) {
             inboxRepository.arrivals.collect { message ->
                 val settings = preferences.current()
                 if (settings.role == DeviceRole.COMPANION) {
-                    messageNotifier.onNewMessage(message, settings.notificationsEnabled, settings.notificationPreview, appInForeground)
+                    messageNotifier.onNewMessage(
+                        message, settings.notificationsEnabled, settings.notificationPreview, appInForeground,
+                        copyAction = settings.notificationCopyCode && !settings.appLock,
+                    )
                 }
             }
         }

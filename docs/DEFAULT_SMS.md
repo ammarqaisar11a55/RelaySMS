@@ -47,6 +47,20 @@ Components (all reachable only by the system): `SmsDeliverReceiver` (`SMS_DELIVE
 (`SEND_RESPOND_VIA_MESSAGE`). Permissions `SEND_SMS`, `READ_SMS`, `RECEIVE_MMS`,
 `RECEIVE_WAP_PUSH` are declared for this and are granted by Android together with the role.
 
+### Other apps and automatic code entry
+
+Banking and messaging apps that fill in a code "by themselves" do it through Android's SMS
+Retriever or SMS User Consent service, or by listening for incoming SMS. All of these are fed
+only by SMS that arrive through **this phone's own modem**. A forwarded message arrives over the
+internet, and Android does not allow any app, default SMS app or not, to announce it to other
+apps as a received SMS. So on the companion phone:
+
+- other apps will **not** detect forwarded codes automatically; use the **Copy code** button on
+  the RelaySMS notification (or in the message) and paste it;
+- an app that insists on verifying the SIM inside the phone itself (for example by sending an SMS
+  from the device, as some banking apps do when registering a device) cannot be completed on a
+  phone without that SIM, with or without RelaySMS.
+
 ## 2. Sending an SMS through the source phone
 
 For a companion without mobile service. The message leaves from the **source phone's SIM and

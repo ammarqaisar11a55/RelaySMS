@@ -123,6 +123,11 @@
             </intent-filter>
         </service>
 
+        <!-- "Copy code" button on this app's own notifications. -->
+        <receiver
+            android:name=".notifications.CopyCodeReceiver"
+            android:exported="false" />
+
         <!-- Outcome of SMS this app sent. Reached only through this app's own pending intents. -->
         <receiver
             android:name=".sms.send.SmsOutcomeReceiver"

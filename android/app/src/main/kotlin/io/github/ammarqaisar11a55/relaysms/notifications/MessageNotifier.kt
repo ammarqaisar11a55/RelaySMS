@@ -58,7 +58,7 @@ class MessageNotifier(private val context: Context) {
     }
 
     @Synchronized
-    fun onNewMessage(message: InboxMessage, enabled: Boolean, showPreview: Boolean, appInForeground: Boolean) {
+    fun onNewMessage(message: InboxMessage, enabled: Boolean, showPreview: Boolean, appInForeground: Boolean, copyAction: Boolean = false) {
         // While the user is looking at the app the inbox itself is the notification.
         if (!enabled || appInForeground || !canPost()) return
         ensureChannel()
@@ -92,6 +92,17 @@ class MessageNotifier(private val context: Context) {
             .setPublicVersion(lockScreen)
             .setGroup(GROUP)
         if (text.expandable) builder.setStyle(NotificationCompat.BigTextStyle().bigText(text.text))
+        if (copyAction && message.hasOtp) {
+            // One tap copies the code without opening the app. The intent names the message
+            // only; the code is not placed in the notification. Android hides actions together
+            // with the content on a secure lock screen.
+            val copy = PendingIntent.getBroadcast(
+                context, message.id.hashCode(),
+                Intent(context, CopyCodeReceiver::class.java).setAction(CopyCodeReceiver.ACTION_COPY).putExtra(CopyCodeReceiver.EXTRA_MESSAGE, message.id),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            builder.addAction(0, "Copy code", copy)
+        }
         try {
             if (showPreview) {
                 manager.notify(message.id.hashCode(), builder.build())

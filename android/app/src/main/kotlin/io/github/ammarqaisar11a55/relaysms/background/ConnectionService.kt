@@ -43,7 +43,14 @@ class ConnectionService : Service() {
         super.onCreate()
         val container = (application as RelaySmsApp).container
         ensureChannel(this)
+        // Always first: Android kills the app if a service started with startForegroundService()
+        // does not call startForeground(), even when it is about to stop again.
         startInForeground(notification(container.relaySocket.state.value))
+        instance = this
+        if (stopRequested) {
+            stopSelf()
+            return
+        }
         container.setBackgroundConnection(true)
         scope.launch {
             container.relaySocket.state.collectLatest { state ->
@@ -65,6 +72,7 @@ class ConnectionService : Service() {
     }
 
     override fun onDestroy() {
+        instance = null
         (application as RelaySmsApp).container.setBackgroundConnection(false)
         scope.cancel()
         SafeLog.event("connection_service_stopped")
@@ -132,6 +140,7 @@ class ConnectionService : Service() {
          * @return false when the start was refused.
          */
         fun start(context: Context): Boolean = try {
+            stopRequested = false
             ContextCompat.startForegroundService(context, Intent(context, ConnectionService::class.java))
             true
         } catch (e: RuntimeException) {
@@ -139,8 +148,21 @@ class ConnectionService : Service() {
             false
         }
 
-        fun stop(context: Context) {
-            context.stopService(Intent(context, ConnectionService::class.java))
+        /**
+         * Stops the service. Never calls Context.stopService(): if that lands between
+         * startForegroundService() and the service's first startForeground(), Android crashes
+         * the app. A running service is told to stop itself; one that is still starting sees the
+         * flag right after it has called startForeground().
+         */
+        fun stop(@Suppress("UNUSED_PARAMETER") context: Context) {
+            stopRequested = true
+            instance?.stopSelf()
         }
+
+        @Volatile private var instance: ConnectionService? = null
+        @Volatile private var stopRequested = false
+
+        /** For tests: whether the service object currently exists. */
+        val isRunning: Boolean get() = instance != null
     }
 }

@@ -35,6 +35,8 @@ data class AppSettings(
     val notificationsEnabled: Boolean = true,
     /** Companion phone: show sender and text in notifications (not on a secure lock screen). Opt-in. */
     val notificationPreview: Boolean = false,
+    /** Companion phone: put a "Copy code" button on notifications of messages that carry a code. */
+    val notificationCopyCode: Boolean = true,
     /** Keep the relay connection open with a foreground service while the app is not on screen. */
     val backgroundConnection: Boolean = false,
     /** Ask for the phone's screen lock before showing the app. */
@@ -81,6 +83,7 @@ class AppPreferences(private val store: DataStore<Preferences>) {
                 clipboardClearSeconds = (p[KEY_CLIPBOARD_CLEAR] ?: 60).coerceIn(0, 600),
                 notificationsEnabled = p[KEY_NOTIFICATIONS] ?: true,
                 notificationPreview = p[KEY_NOTIFICATION_PREVIEW] ?: false,
+                notificationCopyCode = p[KEY_NOTIFICATION_COPY] ?: true,
                 backgroundConnection = p[KEY_BACKGROUND_CONNECTION] ?: false,
                 appLock = p[KEY_APP_LOCK] ?: false,
                 blockScreenshots = p[KEY_BLOCK_SCREENSHOTS] ?: true,
@@ -121,6 +124,8 @@ class AppPreferences(private val store: DataStore<Preferences>) {
 
     suspend fun setNotificationsEnabled(enabled: Boolean) = store.edit { it[KEY_NOTIFICATIONS] = enabled }
 
+    suspend fun setNotificationCopyCode(enabled: Boolean) = store.edit { it[KEY_NOTIFICATION_COPY] = enabled }
+
     suspend fun setNotificationPreview(enabled: Boolean) = store.edit { it[KEY_NOTIFICATION_PREVIEW] = enabled }
 
     suspend fun setClipboardClearSeconds(seconds: Int) = store.edit { it[KEY_CLIPBOARD_CLEAR] = seconds }
@@ -160,6 +165,7 @@ class AppPreferences(private val store: DataStore<Preferences>) {
         val KEY_BLOCK_SCREENSHOTS = booleanPreferencesKey("block_screenshots")
         val KEY_BACKGROUND_CONNECTION = booleanPreferencesKey("background_connection")
         val KEY_NOTIFICATIONS = booleanPreferencesKey("notifications_enabled")
+        val KEY_NOTIFICATION_COPY = booleanPreferencesKey("notification_copy_code")
         val KEY_NOTIFICATION_PREVIEW = booleanPreferencesKey("notification_preview")
         val KEY_CLIPBOARD_CLEAR = intPreferencesKey("clipboard_clear_seconds")
         val KEY_NEWEST_FIRST = booleanPreferencesKey("inbox_newest_first")
