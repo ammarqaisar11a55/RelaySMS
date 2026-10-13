@@ -525,6 +525,10 @@ acceptance criteria need the server.
   Fixed: the service always enters the foreground first and is then asked to stop itself.
   `ConnectionServiceTest` x2, `CopyCodeNotificationTest` x4; on-device suite 70 — PASS;
   companion reliability scenario 8/8 — PASS
+- **v0.9.3 published** (commit `44e8c59`, tag `v0.9.3`, pre-release): CI green on that commit;
+  Release workflow green; downloaded `RelaySMS-0.9.3.apk` matches its `.sha256`, is signed by
+  certificate `ffad97dd…5601596` (same key as 0.9.0–0.9.2, so it installs over them) and reports
+  versionCode 903. Checked on the emulator only; not yet confirmed on the owner's phones
 
 ## Open items that need the owner (as of 2026-10-13)
 
